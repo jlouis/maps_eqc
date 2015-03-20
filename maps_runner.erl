@@ -10,7 +10,12 @@
 -export([
 	size/0,
 	put/2,
-	is_key/1
+	is_key/1,
+	keys/0,
+	remove/1,
+	to_list/0,
+	update/2,
+	values/0
 ]).
 
 start_link() ->
@@ -20,6 +25,11 @@ reset() -> call(reset).
 size() -> call(size).
 put(K, V) -> call({put, K, V}).
 is_key(K) -> call({is_key, K}).
+keys() -> call(keys).
+remove(K) -> call({remove, K}).
+to_list() -> call(to_list).
+update(K, V) -> call({update, K, V}).
+values() -> call(values).
 
 call(X) ->
     gen_server:call(?MODULE, X).
@@ -49,5 +59,14 @@ process({put, K, V}, M) ->
     M2 = maps:put(K, V, M),
     {M2, M2};
 process({is_key, K}, M) -> {maps:is_key(K, M), M};
+process(keys, M) -> {maps:keys(M), M};
+process({remove, K}, M) ->
+    M2 = maps:remove(K, M),
+    {M2, M2};
+process(to_list, M) -> {maps:to_list(M), M};
+process({update, K, V}, M) ->
+    M2 = maps:update(K, V, M),
+    {M2, M2};
+process(values, M) -> {maps:values(M), M};
 process(_, M) -> {{error, unknown_call}, M}.
 
