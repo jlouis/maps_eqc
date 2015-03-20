@@ -15,7 +15,9 @@
 	remove/1,
 	to_list/0,
 	update/2,
-	values/0
+	values/0,
+	from_list/1,
+	m_get/1, m_get/2
 ]).
 
 start_link() ->
@@ -30,6 +32,9 @@ remove(K) -> call({remove, K}).
 to_list() -> call(to_list).
 update(K, V) -> call({update, K, V}).
 values() -> call(values).
+from_list(L) -> call({from_list, L}).
+m_get(K) -> call({get, K}).
+m_get(K, Def) -> call({get, K, Def}).
 
 call(X) ->
     gen_server:call(?MODULE, X).
@@ -65,8 +70,25 @@ process({remove, K}, M) ->
     {M2, M2};
 process(to_list, M) -> {maps:to_list(M), M};
 process({update, K, V}, M) ->
-    M2 = maps:update(K, V, M),
-    {M2, M2};
+    try
+        M2 = maps:update(K, V, M),
+        {M2, M2}
+    catch
+        Class:Err -> {{Class,Err}, M}
+    end;
 process(values, M) -> {maps:values(M), M};
+process({from_list, L}, _) ->
+   M = maps:from_list(L),
+   {M, M};
+process({get, K}, M) ->
+    try
+        V = maps:get(K, M),
+        {V, M}
+    catch
+        Class:Err -> {{Class, Err}, M}
+    end;
+process({get, K, Def}, M) ->
+    V = maps:get(K, M, Def),
+    {V, M};
 process(_, M) -> {{error, unknown_call}, M}.
 

@@ -10,9 +10,90 @@
     
 initial_state() -> #state{}.
 
+%%% MISSING:
+%% with/2
+%% without/2
+%% merge/2
+%% map/2
+%% fold/3
+%% find/2
+
 %% GENERATORS
 map_key() -> int().
 map_value() -> int().
+
+%% GET/3
+%% --------------------------------------------------------------
+
+m_get_default_pos(K, Default) ->
+    maps_runner:m_get(K, Default).
+
+m_get_default_pos_pre(#state { contents = C }) -> C /= [].
+
+m_get_default_pos_args(#state { contents = C }) ->
+    ?LET({Pair, Default}, {elements(C), make_ref()},
+       [element(1, Pair), Default]).
+
+m_get_default_pos_return(#state { contents = C }, [K, _Default]) ->
+    {K, V} = lists:keyfind(K, 1, C),
+    V.
+
+m_get_default_neg(K, Default) ->
+    maps_runner:m_get(K, Default).
+    
+m_get_default_neg_args(#state { contents = C }) ->
+    ?SUCHTHAT([K, _Default], [map_key(), make_ref()],
+        lists:keyfind(K, 1, C) == false).
+        
+m_get_default_neg_return(_S, [_K, Default]) ->
+    Default.
+
+%% GET/2
+%% --------------------------------------------------------------
+
+m_get_pos(K) ->
+    maps_runner:m_get(K).
+
+m_get_pos_pre(#state { contents = C }) -> C /= [].
+
+m_get_pos_args(#state { contents = C }) ->
+    ?LET(Pair, elements(C),
+       [element(1, Pair)]).
+
+m_get_pos_return(#state { contents = C }, [K]) ->
+    {K, V} = lists:keyfind(K, 1, C),
+    V.
+
+m_get_neg(K) ->
+    maps_runner:m_get(K).
+    
+m_get_neg_args(#state { contents = C }) ->
+    ?SUCHTHAT([K], [map_key()],
+        lists:keyfind(K, 1, C) == false).
+        
+m_get_neg_return(_S, [_K]) ->
+    {error, bad_key}.
+    
+
+%% FROM_LIST
+%% --------------------------------------------------------------
+
+from_list(Elems) ->
+    M = maps_runner:from_list(Elems),
+    lists:sort(maps:to_list(M)).
+    
+from_list_pre(#state { contents = C }) -> C == [].
+
+from_list_args(_S) ->
+    [list({map_key(), map_value()})].
+    
+from_list_next(State, _, [Elems]) ->
+    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
+    State#state { contents = Contents }.
+
+from_list_return(_State, [Elems]) ->
+    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
+    lists:sort(Contents).
 
 %% VALUES
 %% --------------------------------------------------------------
@@ -44,6 +125,16 @@ update_pos_next(#state { contents = C } = State, _, [K, V]) ->
 update_pos_return(#state { contents = C}, [K, V]) ->
     lists:sort(replace_contents(K, V, C)).
 
+update_neg(K, V) ->
+    maps_runner:update(K, V).
+    
+update_neg_args(#state { contents = C }) ->
+    ?SUCHTHAT([K, _V], [map_key(), map_value()],
+        lists:keyfind(K, 1, C) == false).
+
+update_neg_return(_S, [_K, _V]) ->
+    {error, badarg}.
+
 %% TO_LIST
 %% --------------------------------------------------------------
 
@@ -74,6 +165,20 @@ remove_pos_next(#state { contents = C } = State, _, [K]) ->
 
 remove_pos_return(#state { contents = C }, [K]) ->
     lists:sort(del_contents(K, C)).
+
+remove_neg(K) ->
+    ResMap = maps_runner:remove(K),
+    lists:sort(maps:to_list(ResMap)).
+    
+remove_neg_args(#state { contents = C }) ->
+    ?SUCHTHAT([K], [map_key()],
+        lists:keyfind(K, 1, C) == false).
+        
+remove_neg_pre(#state { contents = C }, [K]) ->
+    lists:keyfind(K,1,C) == false.
+
+remove_neg_return(#state { contents = C }, [_K]) ->
+    lists:sort(C).
 
 %% KEYS
 %% --------------------------------------------------------------
