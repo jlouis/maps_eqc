@@ -13,13 +13,31 @@ initial_state() -> #state{}.
 %%% MISSING:
 %% with/2
 %% without/2
-%% merge/2
 %% map/2
 %% fold/3
 
 %% GENERATORS
 map_key() -> int().
 map_value() -> int().
+
+%% MERGE/2
+%% --------------------------------------------------------------
+
+merge(M) ->
+    Res = maps_runner:merge(M),
+    lists:sort(maps:to_list(Res)).
+    
+merge_args(_S) ->
+    ?LET(Elems, list({map_key(), map_value()}),
+        [maps:from_list(Elems)]).
+        
+merge_next(#state { contents = C } = State, _, [M]) ->
+    NC = maps:fold(fun (K, V, Cs) -> lists:keystore(K, 1, Cs, {K, V}) end, C, M),
+    State#state { contents = NC }.
+
+merge_return(#state { contents = C }, [M]) ->
+    Res = maps:fold(fun (K, V, Cs) -> lists:keystore(K, 1, Cs, {K, V}) end, C, M),
+    lists:sort(Res).
 
 %% FIND/2
 %% --------------------------------------------------------------
@@ -109,7 +127,8 @@ populate(Variant, Elems) ->
 populate_pre(#state { contents = C }) -> C == [].
 
 populate_args(_S) ->
-    [oneof([from_list, puts]), list({map_key(), map_value()})].
+  ?LET({Variant, K}, {oneof([from_list, puts]), oneof([4, 16, 64, 256, nat()])},
+      [Variant, vector(K, {map_key(), map_value()})]).
     
 populate_next(State, _, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
@@ -269,6 +288,11 @@ size_args(_S) -> [].
 size_return(#state { contents = C }, []) ->
     length(C).
     
+%% WEIGHT
+%% -------------------------------------------------------------
+weight(_S, populate) -> 10;
+weight(_S, _) -> 1.
+
 %% PROPERTY
 %% -------------------------------------------------------------
 postcondition_common(S, Call, Res) ->

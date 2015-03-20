@@ -8,17 +8,18 @@
 
 %% The real commands we can execute
 -export([
-	size/0,
-	put/2,
+	find/1,
 	is_key/1,
 	keys/0,
+	merge/1,
+	m_get/1, m_get/2,
+	populate/2,
+	put/2,
 	remove/1,
+	size/0,
 	to_list/0,
 	update/2,
-	values/0,
-	populate/2,
-	m_get/1, m_get/2,
-	find/1
+	values/0
 ]).
 
 start_link() ->
@@ -33,11 +34,11 @@ remove(K) -> call({remove, K}).
 to_list() -> call(to_list).
 update(K, V) -> call({update, K, V}).
 values() -> call(values).
-from_list(L) -> call({from_list, L}).
 m_get(K) -> call({get, K}).
 m_get(K, Def) -> call({get, K, Def}).
 find(K) -> call({find, K}).
 populate(Variant, Elems) -> call({populate, Variant, Elems}).
+merge(M) -> call({merge, M}).
 
 call(X) ->
     gen_server:call(?MODULE, X).
@@ -99,5 +100,8 @@ process({get, K, Def}, M) ->
 process({find, K}, M) ->
     Res = maps:find(K, M),
     {Res, M};
+process({merge, M2}, M) ->
+    Res = maps:merge(M, M2),
+    {Res, Res};
 process(_, M) -> {{error, unknown_call}, M}.
 
