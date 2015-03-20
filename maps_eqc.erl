@@ -16,11 +16,36 @@ initial_state() -> #state{}.
 %% merge/2
 %% map/2
 %% fold/3
-%% find/2
 
 %% GENERATORS
 map_key() -> int().
 map_value() -> int().
+
+%% FIND/2
+%% --------------------------------------------------------------
+
+find_pos(K) ->
+    maps_runner:find(K).
+    
+find_pos_pre(#state { contents = C }) ->
+    C /= [].
+    
+find_pos_args(S) ->
+    [random_key(S)].
+
+find_pos_return(#state { contents = C }, [K]) ->
+    {K, V} = lists:keyfind(K, 1, C),
+    {ok, V}.
+
+find_neg(K) ->
+    maps_runner:find(K).
+    
+find_neg_args(#state { contents = C }) ->
+    ?SUCHTHAT([K], [map_key()],
+        lists:keyfind(K, 1, C) == false).
+
+find_neg_return(_S, [_K]) ->
+    error.
 
 %% GET/3
 %% --------------------------------------------------------------
@@ -74,24 +99,23 @@ m_get_neg_args(#state { contents = C }) ->
 m_get_neg_return(_S, [_K]) ->
     {error, bad_key}.
     
-
-%% FROM_LIST
+%% POPULATE
 %% --------------------------------------------------------------
 
-from_list(Elems) ->
-    M = maps_runner:from_list(Elems),
+populate(Variant, Elems) ->
+    M = maps_runner:populate(Variant, Elems),
     lists:sort(maps:to_list(M)).
-    
-from_list_pre(#state { contents = C }) -> C == [].
 
-from_list_args(_S) ->
-    [list({map_key(), map_value()})].
+populate_pre(#state { contents = C }) -> C == [].
+
+populate_args(_S) ->
+    [oneof([from_list, puts]), list({map_key(), map_value()})].
     
-from_list_next(State, _, [Elems]) ->
+populate_next(State, _, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     State#state { contents = Contents }.
 
-from_list_return(_State, [Elems]) ->
+populate_return(_State, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     lists:sort(Contents).
 
@@ -274,3 +298,7 @@ del_contents(K, C) ->
 
 replace_contents(K, V, C) ->
     lists:keyreplace(K, 1, C, {K, V}).
+
+random_key(#state { contents = C }) ->
+    ?LET(Pair, elements(C),
+        element(1, Pair)).
