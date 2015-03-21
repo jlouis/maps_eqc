@@ -237,30 +237,19 @@ keys_return(#state { contents = C }, []) ->
 %% IS_KEY
 %% --------------------------------------------------------------
 
-is_key_pos(K) ->
+is_key(K) ->
     maps_runner:is_key(K).
     
-is_key_pos_pre(#state { contents = C }) -> C /= [].
+is_key_args(#state { contents = C }) ->
+    frequency(
+        [{10, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
+        [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K, 1, C) == false)}]).
 
-is_key_pos_args(#state { contents = C }) ->
-    ?LET(Pair, elements(C),
-        [element(1, Pair)]).
+is_key_return(S, [K]) ->
+    lists:keymember(K, 1, S#state.contents).
 
-is_key_pos_return(_S, [_K]) ->
-    true.
-
-is_key_neg(K) ->
-    maps_runner:is_key(K).
-    
-is_key_neg_args(#state { contents = C }) ->
-    ?SUCHTHAT([K], [map_key()],
-        lists:keyfind(K, 1, C) == false).
-
-is_key_neg_pre(#state { contents = C}, [K]) ->
-    lists:keyfind(K, 1, C) == false.
-
-is_key_neg_return(_S, [_K]) ->
-    false.
+is_key_features(_S, [_K], true) -> ["R001: is_key/2 on a present key"];
+is_key_features(_S, [_K], false) -> ["R002: is_key/2 on a non-existing key"].
 
 %% PUT
 %% --------------------------------------------------------------
@@ -277,6 +266,12 @@ put_next(#state { contents = C } = State, _, [K, V]) ->
 
 put_return(#state { contents = C}, [K, V]) ->
     lists:sort(add_contents(K, V, C)).
+
+put_features(S, [K, _Value], _Res) ->
+    case lists:keymember(K, 1, S#state.contents) of
+        true -> ["R003: put/3 on existing key"];
+        false -> ["R004: put on a new key"]
+    end.
 
 %% SIZE
 %% --------------------------------------------------------------
@@ -308,8 +303,9 @@ prop_map() ->
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
-          aggregate(command_names(Cmds),
-              pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok))
+          aggregate(with_title('Commands'), command_names(Cmds),
+          aggregate(with_title('Features'), call_features(H),
+              pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))
         end)).
 
 %% HELPER ROUTINES
