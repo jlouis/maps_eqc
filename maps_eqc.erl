@@ -149,6 +149,9 @@ values_args(_S) -> [].
 values_return(#state { contents = C }, []) ->
     lists:sort([V || {_, V} <- C]).
 
+values_features(_S, _, _) ->
+    ["R014: values/1 called on map"].
+
 %% UPDATE
 %% --------------------------------------------------------------
 
@@ -190,38 +193,32 @@ to_list_args(_S) -> [].
 to_list_return(#state { contents = C }, []) ->
     lists:sort(C).
 
+to_list_features(_, _, _) ->
+    ["R013: to_list/1 called on map"].
+    
 %% REMOVE
 %% --------------------------------------------------------------
 
-remove_pos(K) ->
+remove(K) ->
     ResMap = maps_runner:remove(K),
     lists:sort(maps:to_list(ResMap)).
     
-remove_pos_pre(#state { contents = C }) -> C /= [].
-
-remove_pos_args(#state { contents = C }) ->
-    ?LET(Pair, elements(C),
-        [element(1, Pair)]).
+remove_args(#state { contents = C }) ->
+    frequency(
+      [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
+      [{1,  ?SUCHTHAT([K], [map_key()], lists:keyfind(K, 1, C) == false)}]).
         
-remove_pos_next(#state { contents = C } = State, _, [K]) ->
+remove_next(#state { contents = C } = State, _, [K]) ->
     State#state { contents = del_contents(K, C) }.
 
-remove_pos_return(#state { contents = C }, [K]) ->
+remove_return(#state { contents = C }, [K]) ->
     lists:sort(del_contents(K, C)).
 
-remove_neg(K) ->
-    ResMap = maps_runner:remove(K),
-    lists:sort(maps:to_list(ResMap)).
-    
-remove_neg_args(#state { contents = C }) ->
-    ?SUCHTHAT([K], [map_key()],
-        lists:keyfind(K, 1, C) == false).
-        
-remove_neg_pre(#state { contents = C }, [K]) ->
-    lists:keyfind(K,1,C) == false.
-
-remove_neg_return(#state { contents = C }, [_K]) ->
-    lists:sort(C).
+remove_features(S, [K], _) ->
+    case member(K, S) of
+       true -> ["R011: remove/2 of present key"];
+       false -> ["R012: remove/2 of non-present key"]
+    end.
 
 %% KEYS
 %% --------------------------------------------------------------
@@ -248,7 +245,7 @@ is_key_args(#state { contents = C }) ->
         [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K, 1, C) == false)}]).
 
 is_key_return(S, [K]) ->
-    lists:keymember(K, 1, S#state.contents).
+    member(K, S).
 
 is_key_features(_S, [_K], true) -> ["R001: is_key/2 on a present key"];
 is_key_features(_S, [_K], false) -> ["R002: is_key/2 on a non-existing key"].
@@ -270,7 +267,7 @@ put_return(#state { contents = C}, [K, V]) ->
     lists:sort(add_contents(K, V, C)).
 
 put_features(S, [K, _Value], _Res) ->
-    case lists:keymember(K, 1, S#state.contents) of
+    case member(K, S) of
         true -> ["R003: put/3 on existing key"];
         false -> ["R004: put on a new key"]
     end.
@@ -328,6 +325,9 @@ del_contents(K, C) ->
 
 replace_contents(K, V, C) ->
     lists:keyreplace(K, 1, C, {K, V}).
+
+member(K, #state { contents = C }) ->
+    lists:keymember(K, 1, C).
 
 random_key(#state { contents = C }) ->
     ?LET(Pair, elements(C),
