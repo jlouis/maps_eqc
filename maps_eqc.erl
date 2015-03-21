@@ -45,81 +45,67 @@ merge_features(_S, _, _) ->
 %% FIND/2
 %% --------------------------------------------------------------
 
-find_pos(K) ->
+find(K) ->
     maps_runner:find(K).
-    
-find_pos_pre(#state { contents = C }) ->
-    C /= [].
-    
-find_pos_args(S) ->
-    [random_key(S)].
 
-find_pos_return(#state { contents = C }, [K]) ->
-    {K, V} = lists:keyfind(K, 1, C),
-    {ok, V}.
+find_args(#state { contents = C } = S) ->
+    frequency(
+       [{5, [random_key(S)]} || C /= []] ++
+       [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K,1,C) == false)} ]).
 
-find_neg(K) ->
-    maps_runner:find(K).
-    
-find_neg_args(#state { contents = C }) ->
-    ?SUCHTHAT([K], [map_key()],
-        lists:keyfind(K, 1, C) == false).
 
-find_neg_return(_S, [_K]) ->
-    error.
+find_return(#state { contents = C }, [K]) ->
+    case lists:keyfind(K, 1, C) of
+         false -> error;
+         {K, V} -> {ok, V}
+    end.
+
+find_features(_S, _, error) -> ["R020: find on a non-existing key"];
+find_features(_S, _, {ok, _V}) -> ["R021: find on an existing key"].
 
 %% GET/3
 %% --------------------------------------------------------------
 
-m_get_default_pos(K, Default) ->
+m_get_default(K, Default) ->
     maps_runner:m_get(K, Default).
 
-m_get_default_pos_pre(#state { contents = C }) -> C /= [].
+m_get_default_args(#state { contents = C }) ->
+    frequency(
+      [{5, ?LET({Pair, Default}, {elements(C), make_ref()}, [element(1, Pair), Default])} || C /= [] ] ++
+      [{1, ?SUCHTHAT([K, _Default], [map_key(), make_ref()], lists:keyfind(K, 1, C) == false)}]).
 
-m_get_default_pos_args(#state { contents = C }) ->
-    ?LET({Pair, Default}, {elements(C), make_ref()},
-       [element(1, Pair), Default]).
+m_get_default_return(#state { contents = C }, [K, Default]) ->
+    case lists:keyfind(K,1,C) of
+       false -> Default;
+       {K, V} -> V
+    end.
 
-m_get_default_pos_return(#state { contents = C }, [K, _Default]) ->
-    {K, V} = lists:keyfind(K, 1, C),
-    V.
-
-m_get_default_neg(K, Default) ->
-    maps_runner:m_get(K, Default).
-    
-m_get_default_neg_args(#state { contents = C }) ->
-    ?SUCHTHAT([K, _Default], [map_key(), make_ref()],
-        lists:keyfind(K, 1, C) == false).
-        
-m_get_default_neg_return(_S, [_K, Default]) ->
-    Default.
+m_get_default_features(S, [K, _Default], _) ->
+    case member(K, S) of
+         true -> ["R024: get/3 on an existing key"];
+         false -> ["R025: get/3 on a non-existing key"]
+    end.
 
 %% GET/2
 %% --------------------------------------------------------------
 
-m_get_pos(K) ->
+m_get(K) ->
     maps_runner:m_get(K).
 
-m_get_pos_pre(#state { contents = C }) -> C /= [].
+m_get_args(#state { contents = C }) ->
+    frequency(
+      [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= []] ++
+      [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K,1,C) == false)}]).
 
-m_get_pos_args(#state { contents = C }) ->
-    ?LET(Pair, elements(C),
-       [element(1, Pair)]).
+m_get_return(#state { contents = C }, [K]) ->
+    case lists:keyfind(K,1,C) of
+       false -> {error, bad_key};
+       {K, V} -> V
+    end.
 
-m_get_pos_return(#state { contents = C }, [K]) ->
-    {K, V} = lists:keyfind(K, 1, C),
-    V.
+m_get_features(_S, _, {error, bad_key}) -> ["R022: get/2 on a non-existing key"];
+m_get_features(_S, _, _) -> ["R023: get on a successful key"].
 
-m_get_neg(K) ->
-    maps_runner:m_get(K).
-    
-m_get_neg_args(#state { contents = C }) ->
-    ?SUCHTHAT([K], [map_key()],
-        lists:keyfind(K, 1, C) == false).
-        
-m_get_neg_return(_S, [_K]) ->
-    {error, bad_key}.
-    
 %% POPULATE
 %% --------------------------------------------------------------
 
