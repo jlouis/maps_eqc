@@ -155,31 +155,32 @@ values_features(_S, _, _) ->
 %% UPDATE
 %% --------------------------------------------------------------
 
-update_pos(K, V) ->
-    M2 = maps_runner:update(K, V),
-    lists:sort(maps:to_list(M2)).
-    
-update_pos_pre(#state { contents = C }) -> C /= [].
 
-update_pos_args(#state { contents = C }) ->
-    ?LET(Pair, elements(C),
-        [element(1, Pair), map_value()]).
+update(K, V) ->
+    case maps_runner:update(K, V) of
+        {error, Reason} -> {error, Reason};
+        M -> lists:sort(maps:to_list(M))
+    end.
+    
+update_args(#state { contents = C }) ->
+    frequency(
+      [{5, ?LET(Pair, elements(C), [element(1, Pair), map_value()])} || C /= [] ] ++
+      [{1,  ?SUCHTHAT([K, _V], [map_key(), map_value()], lists:keyfind(K, 1, C) == false)}]).
         
-update_pos_next(#state { contents = C } = State, _, [K, V]) ->
+update_next(#state { contents = C } = State, _, [K, V]) ->
     State#state { contents = replace_contents(K, V, C) }.
 
-update_pos_return(#state { contents = C}, [K, V]) ->
-    lists:sort(replace_contents(K, V, C)).
+update_return(#state { contents = C} = S, [K, V]) ->
+    case member(K, S) of
+        true -> lists:sort(replace_contents(K, V, C));
+        false -> {error, badarg}
+    end.
 
-update_neg(K, V) ->
-    maps_runner:update(K, V).
-    
-update_neg_args(#state { contents = C }) ->
-    ?SUCHTHAT([K, _V], [map_key(), map_value()],
-        lists:keyfind(K, 1, C) == false).
-
-update_neg_return(_S, [_K, _V]) ->
-    {error, badarg}.
+update_features(S, [K, _], _) ->
+   case member(K, S) of
+        true -> ["R015: update/3 on an existing key"];
+        false -> ["R016: update/3 on a non-existing key"]
+   end.
 
 %% TO_LIST
 %% --------------------------------------------------------------
