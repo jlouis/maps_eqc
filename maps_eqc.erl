@@ -10,15 +10,104 @@
     
 initial_state() -> #state{}.
 
-%%% MISSING:
-%% with/2
-%% without/2
-%% fold/3
-
 %% GENERATORS
 map_key() -> int().
 map_value() -> int().
 
+%% WITH/2
+%% --------------------------------------------------------------
+
+with(Ks) ->
+    Res = maps_runner:with(Ks),
+    lists:sort(maps:to_list(Res)).
+    
+with_args(#state { contents = Cs}) ->
+    case Cs of
+        [] -> [list(map_key())];
+        Cs ->
+          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+             [P ++ N])
+    end.
+    
+with_next(#state { contents = Cs } = State, _, [Ks]) ->
+    State#state { contents = [{K, V} || {K, V} <- Cs, lists:member(K, Ks)] }.
+
+with_return(#state { contents = Cs }, [Ks]) ->
+    lists:sort([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
+
+with_features(S, [Ks], _) ->
+    ["R032: with/2 on present keys" || present(Ks, S)] ++
+    ["R033: with/2 on non-existing keys" || non_existing(Ks, S)].
+
+%% WITH/2 (Query)
+%% --------------------------------------------------------------
+
+with_q(Ks) ->
+    Res = maps_runner:with_q(Ks),
+    lists:sort(maps:to_list(Res)).
+    
+with_q_args(#state { contents = Cs}) ->
+    case Cs of
+        [] -> [list(map_key())];
+        Cs ->
+          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+             [P ++ N])
+    end.
+    
+with_q_return(#state { contents = Cs }, [Ks]) ->
+    lists:sort([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
+    
+with_q_features(S, [Ks], _) ->
+    ["R028: with/2 query on present keys" || present(Ks, S)] ++
+    ["R029: with/2 query on non-existing keys" || non_existing(Ks, S)].
+
+%% WITHOUT/2
+%% --------------------------------------------------------------
+
+without(Ks) ->
+    Res = maps_runner:without(Ks),
+    lists:sort(maps:to_list(Res)).
+    
+without_args(#state { contents = Cs}) ->
+    case Cs of
+        [] -> [list(map_key())];
+        Cs ->
+          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+             [P ++ N])
+    end.
+    
+without_next(#state { contents = Cs } = State, _, [Ks]) ->
+    State#state { contents = [{K, V} || {K, V} <- Cs, not lists:member(K, Ks)] }.
+
+without_return(#state { contents = Cs }, [Ks]) ->
+    lists:sort([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
+
+without_features(S, [Ks], _) ->
+    ["R034: withtout/2 on present keys" || present(Ks, S)] ++
+    ["R035: withtout/2 on non-existing keys" || non_existing(Ks, S)].
+    
+%% WITHOUT/2 (Query)
+%% --------------------------------------------------------------
+
+without_q(Ks) ->
+    Res = maps_runner:without_q(Ks),
+    lists:sort(maps:to_list(Res)).
+    
+without_q_args(#state { contents = Cs}) ->
+    case Cs of
+        [] -> [list(map_key())];
+        Cs ->
+          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+             [P ++ N])
+    end.
+    
+without_q_return(#state { contents = Cs }, [Ks]) ->
+    lists:sort([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
+
+without_q_features(S, [Ks], _) ->
+    ["R030: withtout/2 query on present keys" || present(Ks, S)] ++
+    ["R031: withtout/2 query on non-existing keys" || non_existing(Ks, S)].
+    
 %% FOLD/3
 %% --------------------------------------------------------------
 
@@ -343,7 +432,7 @@ prop_map() ->
         {ok, Pid} = maps_runner:start_link(),
         fun() -> exit(Pid, kill) end
     end,
-      ?FORALL(Cmds, more_commands(8, commands(?MODULE)),
+      ?FORALL(Cmds, more_commands(4, commands(?MODULE)),
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
@@ -369,3 +458,10 @@ member(K, #state { contents = C }) ->
 random_key(#state { contents = C }) ->
     ?LET(Pair, elements(C),
         element(1, Pair)).
+
+present(Ks, S) ->
+    lists:any(fun(K) -> member(K, S) end, Ks).
+    
+non_existing(Ks, S) ->
+    lists:any(fun(K) -> not member(K, S) end, Ks).
+

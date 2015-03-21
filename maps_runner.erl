@@ -21,7 +21,9 @@
 	update/2,
 	values/0,
 	map/1,
-	fold/2
+	fold/2,
+	with/1, with_q/1,
+	without/1, without_q/1
 ]).
 
 start_link() ->
@@ -43,6 +45,10 @@ populate(Variant, Elems) -> call({populate, Variant, Elems}).
 merge(M) -> call({merge, M}).
 map(F) -> call({map, F}).
 fold(F, Init) -> call({fold, F, Init}).
+with_q(Ks) -> call({with_q, Ks}).
+with(Ks) -> call({with, Ks}).
+without_q(Ks) -> call({without_q, Ks}).
+without(Ks) -> call({without, Ks}).
 
 call(X) ->
     gen_server:call(?MODULE, X).
@@ -111,5 +117,15 @@ process({map, F}, M) ->
     M2 = maps:map(F, M),
     {M2, M2};
 process({fold, F, Init}, M) -> {maps:fold(F, Init, M), M};
+process({with_q, Ks}, M) ->
+    {maps:with(Ks, M), M};
+process({with, Ks}, M) ->
+    M2 = maps:with(Ks, M),
+    {M2, M2};
+process({without_q, Ks}, M) ->
+    {maps:without(Ks, M), M};
+process({without, Ks}, M) ->
+    M2 = maps:without(Ks, M),
+    {M2, M2};
 process(_, M) -> {{error, unknown_call}, M}.
 
