@@ -6,6 +6,12 @@
 
 -export([init/1, code_change/3, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+%% Meta-commands
+-export([
+	extract/0,
+	eq/1
+]).
+
 %% The real commands we can execute
 -export([
 	find/1,
@@ -29,6 +35,9 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
     
+extract() -> call(extract).
+eq(M) -> call({eq, M}).
+
 reset() -> call(reset).
 size() -> call(size).
 put(K, V) -> call({put, K, V}).
@@ -72,6 +81,9 @@ code_change(_Oldvsn, State, _Aux) ->
 terminate(_Reason, _State) ->
     ok.
 
+process(extract, M) -> {M, M};
+process({eq, MIn}, M) ->
+    {MIn =:= M, M};
 process(reset, _) -> {ok, #{}};
 process(size, M) -> {maps:size(M), M};
 process({put, K, V}, M) ->

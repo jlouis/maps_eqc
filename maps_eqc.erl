@@ -14,6 +14,51 @@ initial_state() -> #state{}.
 map_key() -> int().
 map_value() -> int().
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% META-COMMAND SECTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% Meta-commands are commands which are not present in the 'maps' module, yet
+%% they encode properties which should be true of random maps().
+
+%% EXTRACT
+%% --------------------------------------------------------------
+%% Reads the map from the runner process and ensures a copy of the map is
+%% consistent.
+extract() ->
+    maps_runner:extract().
+    
+extract_args(_S) -> [].
+
+extract_return(#state { contents = Cs }, []) ->
+    maps:from_list(Cs).
+    
+extract_features(_S, _, _) ->
+    ["R036: Maps are consistent when sending them to another process"].
+
+%% ROUNDTRIP
+%% --------------------------------------------------------------
+%% Sending a map back and forth should be reflexive.
+roundtrip() ->
+    M = maps_runner:extract(),
+    maps_runner:eq(M).
+    
+roundtrip_args(_S) -> [].
+
+roundtrip_return(_S, []) ->
+    true.
+    
+roundtrip_features(_S, _, _) ->
+    ["R037: Maps sent roundtrip through another process are reflexive"].
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% COMMAND SECTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% The following section contains the standard 'maps' module commands, which
+%% you can call as a user of the module.
+%%
+
 %% WITH/2
 %% --------------------------------------------------------------
 
@@ -417,10 +462,27 @@ size_features(_S, [], Sz) ->
      true -> ["R009: size/1 on a small non-empty map"]
    end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% PROPERTY AND TUNING SECTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% The section here contains the main property as well as the major parts of the
+%% test case such as command weighting and common postcondition checks
+%%
+
 %% WEIGHT
 %% -------------------------------------------------------------
-weight(_S, populate) ->20;
-weight(_S, _) -> 1.
+weight(_S, populate) ->200;
+%% Make operations which alter the map a lot less likely
+weight(_S, with) -> 2;
+weight(_S, without) -> 2;
+%% Consistency checks probably find stuff even if called a bit rarer
+weight(_S, extract) -> 5;
+weight(_S, roundtrip) -> 5;
+weight(_S, with_q) -> 5;
+weight(_S, without_q) -> 5;
+%% Default weight is 10 so we can make commands *less* likely than the default
+weight(_S, _) -> 10.
 
 %% PROPERTY
 %% -------------------------------------------------------------
@@ -441,8 +503,12 @@ prop_map() ->
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))
         end)).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HELPER ROUTINES
-%% -------------------------------------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 
+%% Various helper routines used by the model in more than one place.
+%%
 add_contents(K, V, C) ->
     lists:keystore(K, 1, C, {K, V}).
 
