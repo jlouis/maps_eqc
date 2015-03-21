@@ -72,6 +72,9 @@ become_next(#state { persist = Ps } = State, _, [Ref]) ->
     
 become_return(_S, [_Ref]) ->
     ok.
+    
+become_features(_S, [_Ref], _) ->
+    ["R039: Refocus and \"become\" an old version of the map"].
 
 %% EXTRACT
 %% --------------------------------------------------------------

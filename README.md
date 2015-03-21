@@ -55,3 +55,4 @@ We currently test against the following features:
 	R036: Maps are consistent when sending them to another process
 	R037: Maps sent roundtrip through another process are reflexive
 	R038: Recalled a persisted version of the map successfully
+	R039: Refocus and "become" an old version of the map
