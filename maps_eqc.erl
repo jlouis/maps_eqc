@@ -339,7 +339,16 @@ populate(_K, Variant, Elems) ->
 populate_pre(#state { contents = C }) -> C == [].
 
 populate_args(_S) ->
-  ?LET({Variant, K}, {oneof([from_list, puts]), oneof([nat(), 8, 16, 64, 256])},
+  ?LET(
+  	{Variant, K},
+  	{oneof([from_list, puts]),
+  	 frequency([
+  	     {10, 3},
+  	     {10, 8},
+  	     {10, 32},
+  	     {5, 64},
+  	     {5, 256},
+  	     {20, nat()}])},
       [K, Variant, vector(K, {map_key(), map_value()})]).
     
 populate_next(State, _, [_K, _Variant, Elems]) ->
@@ -359,8 +368,9 @@ populate_features(_S, [K, Variant, _], _) ->
     
 interpret_size(256) -> "256";
 interpret_size(64) -> "64";
-interpret_size(16) -> "16";
+interpret_size(32) -> "32";
 interpret_size(8) -> "8";
+interpret_size(3) -> "3";
 interpret_size(_Sz) -> "nat()".
 
 %% VALUES
@@ -527,10 +537,10 @@ size_features(_S, [], Sz) ->
 
 %% WEIGHT
 %% -------------------------------------------------------------
-weight(_S, populate) ->200;
+weight(_S, populate) -> 200;
 %% Make operations which alter the map a lot less likely
-weight(_S, with) -> 2;
-weight(_S, without) -> 2;
+weight(_S, with) -> 0;
+weight(_S, without) -> 0;
 %% Consistency checks probably find stuff even if called a bit rarer
 weight(_S, extract) -> 5;
 weight(_S, roundtrip) -> 5;
@@ -551,7 +561,7 @@ prop_map() ->
         {ok, Pid} = maps_runner:start_link(),
         fun() -> exit(Pid, kill) end
     end,
-      ?FORALL(Cmds, more_commands(4, commands(?MODULE)),
+      ?FORALL(Cmds, more_commands(8, commands(?MODULE)),
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
