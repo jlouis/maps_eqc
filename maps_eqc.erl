@@ -13,12 +13,31 @@ initial_state() -> #state{}.
 %%% MISSING:
 %% with/2
 %% without/2
-%% map/2
 %% fold/3
 
 %% GENERATORS
 map_key() -> int().
 map_value() -> int().
+
+%% MAP/2
+%% --------------------------------------------------------------
+
+map(F) ->
+     Res = maps_runner:map(F),
+     lists:sort(maps:to_list(Res)).
+     
+map_args(_S) ->
+     [function2(map_value())].
+     
+map_next(#state { contents = Cs } = State, _, [F]) ->
+    NCs = [{K, F(K, V)} || {K, V} <- Cs],
+    State#state { contents = NCs }.
+    
+map_return(#state { contents = Cs }, [F]) ->
+    NCs = [{K, F(K, V)} || {K, V} <- Cs],
+    lists:sort(NCs).
+    
+map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
 
 %% MERGE/2
 %% --------------------------------------------------------------
