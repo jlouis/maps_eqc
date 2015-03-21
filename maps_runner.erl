@@ -11,7 +11,8 @@
 	extract/0,
 	eq/1,
 	remember/1,
-	recall/1
+	recall/1,
+	become/1
 ]).
 
 %% The real commands we can execute
@@ -46,6 +47,7 @@ extract() -> call(extract).
 eq(M) -> call({eq, M}).
 remember(Ref) -> call({remember, Ref}).
 recall(Ref) -> call({recall, Ref}).
+become(Ref) -> call({become, Ref}).
 
 reset() -> call(reset).
 size() -> call(size).
@@ -77,6 +79,9 @@ init([]) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
     
+handle_call({become, Ref}, _From, #state { persist = Ps } = State) ->
+    {value, {Ref, Old}, Ps2} = lists:keytake(Ref, 1, Ps),
+    {reply, ok, State#state { m = Old, persist = Ps2 }};
 handle_call({remember, Ref}, _From, #state { m = M, persist = Ps } = State) ->
     {reply, ok, State#state { persist = lists:keystore(Ref, 1, Ps, {Ref, M}) } };
 handle_call({recall, Ref}, _From, #state { persist = Ps } = State) ->

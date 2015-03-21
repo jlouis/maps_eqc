@@ -22,10 +22,11 @@ map_value() -> int().
 %% Meta-commands are commands which are not present in the 'maps' module, yet
 %% they encode properties which should be true of random maps().
 
-%% REMEMBER/RECALL
+%% REMEMBER/RECALL/BECOME
 %% --------------------------------------------------------------
 %% Maps are persistent. Let the model Remember a map in a given state. Later
 %% recalling an older version of the map should be consistent at any point in time.
+%% Also, allow us to become an older version of the map some times.
 remember(Ref) ->
     maps_runner:remember(Ref).
     
@@ -55,6 +56,22 @@ recall_return(#state { persist = Ps }, [Ref]) ->
 
 recall_features(_S, _, _) ->
     ["R038: Recalled a persisted version of the map successfully"].
+
+become(Ref) ->
+    maps_runner:become(Ref).
+    
+become_pre(#state { persist = Ps }) -> Ps /= [].
+
+become_args(#state { persist = Ps }) ->
+    ?LET(Pair, elements(Ps),
+        [element(1, Pair)]).
+        
+become_next(#state { persist = Ps } = State, _, [Ref]) ->
+    {value, {Ref, Old}, Ps2} = lists:keytake(Ref, 1, Ps),
+    State#state { persist = Ps2, contents = Old }.
+    
+become_return(_S, [_Ref]) ->
+    ok.
 
 %% EXTRACT
 %% --------------------------------------------------------------
@@ -516,6 +533,8 @@ weight(_S, extract) -> 5;
 weight(_S, roundtrip) -> 5;
 weight(_S, with_q) -> 5;
 weight(_S, without_q) -> 5;
+%% Becoming an old map should happen but be pretty unlikely
+weight(_S, become) -> 1;
 %% Default weight is 10 so we can make commands *less* likely than the default
 weight(_S, _) -> 10.
 
