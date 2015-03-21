@@ -234,6 +234,8 @@ keys_args(_S) -> [].
 keys_return(#state { contents = C }, []) ->
     lists:sort([K || {K, _} <- C]).
 
+keys_features(_S, _, _) -> ["R010: Calling keys/1 on the map"].
+
 %% IS_KEY
 %% --------------------------------------------------------------
 
@@ -283,6 +285,15 @@ size_args(_S) -> [].
 size_return(#state { contents = C }, []) ->
     length(C).
     
+size_features(_S, [], Sz) ->
+   if
+     Sz >= 128 -> ["R005: size/1 on a 128+ map"];
+     Sz >= 64 -> ["R006: size/1 on a 64+ map"];
+     Sz >= 16 -> ["R007: size/1 on a 16+ map"];
+     Sz == 0 -> ["R008: size/1 on an empty (0) map"];
+     true -> ["R009: size/1 on a small non-empty map"]
+   end.
+
 %% WEIGHT
 %% -------------------------------------------------------------
 weight(_S, populate) -> 10;
@@ -292,7 +303,6 @@ weight(_S, _) -> 1.
 %% -------------------------------------------------------------
 postcondition_common(S, Call, Res) ->
     eq(Res, return_value(S, Call)).
-
 
 prop_map() ->
     ?SETUP(fun() ->
