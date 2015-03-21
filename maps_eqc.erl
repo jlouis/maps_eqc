@@ -39,6 +39,9 @@ merge_return(#state { contents = C }, [M]) ->
     Res = maps:fold(fun (K, V, Cs) -> lists:keystore(K, 1, Cs, {K, V}) end, C, M),
     lists:sort(Res).
 
+merge_features(_S, _, _) ->
+    ["R019: Merging two maps"].
+
 %% FIND/2
 %% --------------------------------------------------------------
 
@@ -120,23 +123,36 @@ m_get_neg_return(_S, [_K]) ->
 %% POPULATE
 %% --------------------------------------------------------------
 
-populate(Variant, Elems) ->
+populate(_K, Variant, Elems) ->
     M = maps_runner:populate(Variant, Elems),
     lists:sort(maps:to_list(M)).
 
 populate_pre(#state { contents = C }) -> C == [].
 
 populate_args(_S) ->
-  ?LET({Variant, K}, {oneof([from_list, puts]), oneof([4, 16, 64, 256, nat()])},
-      [Variant, vector(K, {map_key(), map_value()})]).
+  ?LET({Variant, K}, {oneof([from_list, puts]), oneof([nat(), 8, 16, 64, 256])},
+      [K, Variant, vector(K, {map_key(), map_value()})]).
     
-populate_next(State, _, [_Variant, Elems]) ->
+populate_next(State, _, [_K, _Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     State#state { contents = Contents }.
 
-populate_return(_State, [_Variant, Elems]) ->
+populate_return(_State, [_K, _Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     lists:sort(Contents).
+
+populate_features(_S, [K, Variant, _], _) ->
+    Sz = interpret_size(K),
+    case Variant of
+        from_list -> ["R017x: populating an empty map with from_list/1 of size: " ++ Sz];
+        puts -> ["R018x: populating an empty map with put/2 size: " ++ Sz]
+    end.
+    
+interpret_size(256) -> "256";
+interpret_size(64) -> "64";
+interpret_size(16) -> "16";
+interpret_size(8) -> "8";
+interpret_size(_Sz) -> "nat()".
 
 %% VALUES
 %% --------------------------------------------------------------
