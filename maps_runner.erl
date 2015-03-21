@@ -20,7 +20,8 @@
 	to_list/0,
 	update/2,
 	values/0,
-	map/1
+	map/1,
+	fold/2
 ]).
 
 start_link() ->
@@ -41,6 +42,7 @@ find(K) -> call({find, K}).
 populate(Variant, Elems) -> call({populate, Variant, Elems}).
 merge(M) -> call({merge, M}).
 map(F) -> call({map, F}).
+fold(F, Init) -> call({fold, F, Init}).
 
 call(X) ->
     gen_server:call(?MODULE, X).
@@ -108,5 +110,6 @@ process({merge, M2}, M) ->
 process({map, F}, M) ->
     M2 = maps:map(F, M),
     {M2, M2};
+process({fold, F, Init}, M) -> {maps:fold(F, Init, M), M};
 process(_, M) -> {{error, unknown_call}, M}.
 

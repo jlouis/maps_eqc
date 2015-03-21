@@ -19,6 +19,21 @@ initial_state() -> #state{}.
 map_key() -> int().
 map_value() -> int().
 
+%% FOLD/3
+%% --------------------------------------------------------------
+
+fold() ->
+    Res = maps_runner:fold(fun(K, V, L) -> [{K, V} | L] end, []),
+    lists:sort(Res).
+    
+fold_args(_S) -> [].
+
+fold_return(#state { contents = Cs }, _) ->
+    lists:sort(Cs).
+    
+fold_features(_S, _, _) ->
+    ["R027: traverse over the map by fold/3"].
+
 %% MAP/2
 %% --------------------------------------------------------------
 
