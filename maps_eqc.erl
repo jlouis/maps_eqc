@@ -22,9 +22,10 @@ map_value() -> int().
 %% Meta-commands are commands which are not present in the 'maps' module, yet
 %% they encode properties which should be true of random maps().
 
-%% REMEMBER
+%% REMEMBER/RECALL
 %% --------------------------------------------------------------
-%% Maps are persistent. Let the model remember a map in a given state
+%% Maps are persistent. Let the model Remember a map in a given state. Later
+%% recalling an older version of the map should be consistent at any point in time.
 remember(Ref) ->
     maps_runner:remember(Ref).
     
@@ -36,9 +37,8 @@ remember_next(#state { contents = Cs, persist = Ps } = State, _, [Ref]) ->
 remember_return(_S, [_Ref]) ->
     ok.
     
-%% RECALL
-%% --------------------------------------------------------------
-%% Recalling and older version of the map should be consistent at any point in time
+%% We hardly need a feature for this
+
 recall(Ref) ->
     maps_runner:recall(Ref).
     
@@ -53,6 +53,8 @@ recall_return(#state { persist = Ps }, [Ref]) ->
     {Ref, Cs} = lists:keyfind(Ref, 1, Ps),
     {ok, maps:from_list(Cs)}.
 
+recall_features(_S, _, _) ->
+    ["R037: Recalled a persisted version of the map successfully"].
 
 %% EXTRACT
 %% --------------------------------------------------------------
@@ -531,10 +533,20 @@ prop_map() ->
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
+          collect(with_title('Final log2 size'), model_log2_size(S),
           aggregate(with_title('Commands'), command_names(Cmds),
           aggregate(with_title('Features'), call_features(H),
-              pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))
+              pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok))))
         end)).
+
+model_log2_size(#state { contents = Cs }) ->
+     case length(Cs) of
+         0 -> 0;
+         L ->
+             Sz = math:log10(L) / math:log10(2), %% Convert to log2 from log10
+             round(Sz)
+     end.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HELPER ROUTINES
