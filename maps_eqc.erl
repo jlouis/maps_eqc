@@ -296,7 +296,7 @@ size_features(_S, [], Sz) ->
 
 %% WEIGHT
 %% -------------------------------------------------------------
-weight(_S, populate) -> 10;
+weight(_S, populate) ->20;
 weight(_S, _) -> 1.
 
 %% PROPERTY
