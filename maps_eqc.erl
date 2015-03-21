@@ -6,7 +6,8 @@
 -compile(export_all).
 
 -record(state,
-    { contents = [] }).
+    { contents = [],
+      persist = [] }).
     
 initial_state() -> #state{}.
 
@@ -20,6 +21,38 @@ map_value() -> int().
 %%
 %% Meta-commands are commands which are not present in the 'maps' module, yet
 %% they encode properties which should be true of random maps().
+
+%% REMEMBER
+%% --------------------------------------------------------------
+%% Maps are persistent. Let the model remember a map in a given state
+remember(Ref) ->
+    maps_runner:remember(Ref).
+    
+remember_args(_S) -> [make_ref()].
+
+remember_next(#state { contents = Cs, persist = Ps } = State, _, [Ref]) ->
+    State#state { persist = lists:keystore(Ref, 1, Ps, {Ref, Cs}) }.
+    
+remember_return(_S, [_Ref]) ->
+    ok.
+    
+%% RECALL
+%% --------------------------------------------------------------
+%% Recalling and older version of the map should be consistent at any point in time
+recall(Ref) ->
+    maps_runner:recall(Ref).
+    
+%% Can only recall when there are persisted maps to recall
+recall_pre(#state { persist = Ps }) -> Ps /= [].
+
+recall_args(#state { persist = Ps }) ->
+    ?LET(Pair, elements(Ps),
+       [element(1, Pair)]).
+       
+recall_return(#state { persist = Ps }, [Ref]) ->
+    {Ref, Cs} = lists:keyfind(Ref, 1, Ps),
+    {ok, maps:from_list(Cs)}.
+
 
 %% EXTRACT
 %% --------------------------------------------------------------

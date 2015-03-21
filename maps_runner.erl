@@ -9,7 +9,9 @@
 %% Meta-commands
 -export([
 	extract/0,
-	eq/1
+	eq/1,
+	remember/1,
+	recall/1
 ]).
 
 %% The real commands we can execute
@@ -32,11 +34,18 @@
 	without/1, without_q/1
 ]).
 
+-record(state,{
+	m :: map(), %% The map we are testing
+	persist :: [{reference(), map()}] %% The persistence list
+}).
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
     
 extract() -> call(extract).
 eq(M) -> call({eq, M}).
+remember(Ref) -> call({remember, Ref}).
+recall(Ref) -> call({recall, Ref}).
 
 reset() -> call(reset).
 size() -> call(size).
@@ -63,14 +72,19 @@ call(X) ->
     gen_server:call(?MODULE, X).
 
 init([]) ->
-    {ok, #{}}.
+    {ok, #state { m = #{}, persist = [] } }.
     
 handle_cast(_Msg, State) ->
     {noreply, State}.
     
-handle_call(C, _From, State) ->
-    {R, NS} = process(C, State),
-    {reply, R, NS}.
+handle_call({remember, Ref}, _From, #state { m = M, persist = Ps } = State) ->
+    {reply, ok, State#state { persist = lists:keystore(Ref, 1, Ps, {Ref, M}) } };
+handle_call({recall, Ref}, _From, #state { persist = Ps } = State) ->
+    {Ref, M} = lists:keyfind(Ref, 1, Ps),
+    {reply, {ok, M}, State};
+handle_call(C, _From, #state { m = M } = State) ->
+    {R, M2} = process(C, M),
+    {reply, R, State#state { m = M2 }}.
     
 handle_info(_Info, State) ->
     {noreply, State}.
