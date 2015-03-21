@@ -54,7 +54,7 @@ recall_return(#state { persist = Ps }, [Ref]) ->
     {ok, maps:from_list(Cs)}.
 
 recall_features(_S, _, _) ->
-    ["R037: Recalled a persisted version of the map successfully"].
+    ["R038: Recalled a persisted version of the map successfully"].
 
 %% EXTRACT
 %% --------------------------------------------------------------
