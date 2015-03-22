@@ -13,8 +13,7 @@ initial_state() -> #state{}.
 
 %% TODO:
 %% —Extend generators and make them nastier.
-%% —binary_to_term/term_to_binary isomorphisms
-%% —to_list/from_list isomorphisms
+%% —Initialize the property with use of 'populate' since this can uncover many bugs
 %% 
 %% GENERATORS
 map_key() -> int().
@@ -564,6 +563,11 @@ weight(_S, with_q) -> 5;
 weight(_S, without_q) -> 5;
 %% Becoming an old map should happen but be pretty unlikely
 weight(_S, become) -> 1;
+%% Commands that manipulate the map are slightly more interesting:
+weight(_S, put) -> 20;
+weight(_S, update) -> 20;
+weight(_S, remove) -> 20;
+weight(_S, merge) -> 20;
 %% Default weight is 10 so we can make commands *less* likely than the default
 weight(_S, _) -> 10.
 
