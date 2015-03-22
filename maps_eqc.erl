@@ -11,9 +11,32 @@
     
 initial_state() -> #state{}.
 
+%% TODO:
+%% —Extend generators and make them nastier.
+%% —binary_to_term/term_to_binary isomorphisms
+%% —to_list/from_list isomorphisms
+%% 
 %% GENERATORS
 map_key() -> int().
 map_value() -> int().
+
+gen_map(KGen, VGen) ->
+    ?LET({Perturb, K},
+        {choose(-3, 3),
+         frequency([
+  	     {10, 4},
+  	     {10, 8},
+  	     {10, 32},
+  	     {5, 64},
+  	     {5, 256},
+  	     {20, nat()}])},
+  	vector(abs(K + Perturb), {KGen, VGen})).
+  	
+map_list() ->
+    gen_map(map_key(), map_value()).
+
+map_map() ->
+    ?LET(ML, map_list(), maps:from_list(ML)).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% META-COMMAND SECTION
@@ -332,46 +355,39 @@ m_get_features(_S, _, _) -> ["R023: get on a successful key"].
 %% POPULATE
 %% --------------------------------------------------------------
 
-populate(_K, Variant, Elems) ->
+populate(Variant, Elems) ->
     M = maps_runner:populate(Variant, Elems),
     lists:sort(maps:to_list(M)).
 
 populate_pre(#state { contents = C }) -> C == [].
 
 populate_args(_S) ->
-  ?LET(
-  	{Variant, K},
-  	{oneof([from_list, puts]),
-  	 frequency([
-  	     {10, 3},
-  	     {10, 8},
-  	     {10, 32},
-  	     {5, 64},
-  	     {5, 256},
-  	     {20, nat()}])},
-      [K, Variant, vector(K, {map_key(), map_value()})]).
+  [oneof([from_list, puts]),
+   map_list()].
     
-populate_next(State, _, [_K, _Variant, Elems]) ->
+populate_next(State, _, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     State#state { contents = Contents }.
 
-populate_return(_State, [_K, _Variant, Elems]) ->
+populate_return(_State, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     lists:sort(Contents).
 
-populate_features(_S, [K, Variant, _], _) ->
-    Sz = interpret_size(K),
+populate_features(_S, [Variant, M], _) ->
+    Sz = interpret_size(length(M)),
     case Variant of
         from_list -> ["R017x: populating an empty map with from_list/1 of size: " ++ Sz];
         puts -> ["R018x: populating an empty map with put/2 size: " ++ Sz]
     end.
-    
-interpret_size(256) -> "256";
-interpret_size(64) -> "64";
-interpret_size(32) -> "32";
-interpret_size(8) -> "8";
-interpret_size(3) -> "3";
-interpret_size(_Sz) -> "nat()".
+
+interpret_size(Sz) when Sz >= 64 -> "64+";
+interpret_size(Sz) when Sz >= 32 -> "32+";
+interpret_size(Sz) when Sz >= 16 -> "16+";
+interpret_size(Sz) when Sz >= 8 -> "8+";
+interpret_size(Sz) when Sz >= 4 -> "4+";
+interpret_size(Sz) when Sz >= 2 -> "2+";
+interpret_size(Sz) when Sz >= 1 -> "1+";
+interpret_size(0) -> "0".
 
 %% VALUES
 %% --------------------------------------------------------------
