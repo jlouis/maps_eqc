@@ -80,11 +80,16 @@ prop_merge() ->
       end).
 
 %% Deduplicate a list
-dedup([{K, V} | T]) ->
-    D = dedup(T),
-    case lists:keymember(K,1,D) of
-      false -> [{K, V} | D];
-      true -> D
-    end;
-dedup([]) -> [].
+is_key(_K, []) -> false;
+is_key(K, [{K, _} | _]) -> true;
+is_key(K, [_|T]) -> is_key(K, T).
 
+dedup(L) ->
+    lists:foldr(fun({K, V}, D) ->
+    	case is_key(K, D) of
+    	    true -> D;
+    	    false -> [{K, V} | D]
+    	end
+     end,
+     [],
+     L).

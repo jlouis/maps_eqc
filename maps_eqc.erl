@@ -13,11 +13,26 @@ initial_state() -> #state{}.
 
 %% TODO:
 %% —Extend generators and make them nastier.
+%% —Understand how real() values are handled in maps.
 %% —Initialize the property with use of 'populate' since this can uncover many bugs
 %% 
 %% GENERATORS
-map_key() -> int().
-map_value() -> int().
+atom() -> elements([flower, hill, pyke, rivers, sand, snow, stone, storm, waters]).
+
+map_term() ->
+    ?SIZED(Sz, map_term(Sz)).
+    
+map_term(0) ->
+    oneof([int(), atom(), binary()]);
+map_term(K) ->
+    frequency([
+        {40, map_term(0)},
+        {1, ?LAZY(list(map_term(K div 8)))},
+        {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
+    ]).
+
+map_key() -> map_term().
+map_value() -> map_term().
 
 gen_map(KGen, VGen) ->
     ?LET({Perturb, K},
@@ -581,7 +596,7 @@ prop_map() ->
         {ok, Pid} = maps_runner:start_link(),
         fun() -> exit(Pid, kill) end
     end,
-      ?FORALL(Cmds, more_commands(8, commands(?MODULE)),
+      ?FORALL(Cmds, more_commands(2, commands(?MODULE)),
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
