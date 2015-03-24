@@ -13,6 +13,8 @@ Quviq Erlang QuickCheck 1.33.3 or higher I think. May work on earlier versions o
 
 The current model crashes `OTP-17.4.1-1428-g7409949` with a segmentation fault. I have yet to figure out what is wrong, but something is wrong.
 
+Furthermore, we break OTP-17.4.1 as well on map equality.
+
 ## Features
 
 We currently test against the following features:

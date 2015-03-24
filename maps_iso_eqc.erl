@@ -31,7 +31,7 @@ prop_list_iso_fg() ->
         begin
             List = maps:to_list(M),
             M2 = maps:from_list(List),
-            eqc_statem:eq(M, M2)
+            equals(M, M2)
         end).
 
 prop_list_iso_gf() ->
@@ -40,7 +40,7 @@ prop_list_iso_gf() ->
         LD = dedup(L),
         M = maps:from_list(L),
         LD2 = maps:to_list(M),
-        eqc_statem:eq(lists:sort(LD), lists:sort(LD2))
+        equals(lists:sort(LD), lists:sort(LD2))
       end).
 
 %% There is a binary embedding as well, but we only test the 'f·g' path
@@ -54,7 +54,7 @@ prop_binary_iso_fg() ->
          begin
            Binary = term_to_binary(M, Opts),
            M2 = binary_to_term(Binary),
-           eqc_statem:eq(M, M2)
+           equals(M, M2)
          end).
 
 %% Merged maps have certain correctness properties. In particular, the 2nd
