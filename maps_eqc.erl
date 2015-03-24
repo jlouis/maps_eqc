@@ -25,6 +25,7 @@ map_term() ->
 map_term(0) ->
     oneof([
     	int(), largeint(), atom(), binary(), bitstring(), bool(), char(),
+    	real(),
     	function0(int()), function2(int())
     ]);
 map_term(K) ->
@@ -308,11 +309,11 @@ merge_args(_S) ->
         [maps:from_list(Elems)]).
         
 merge_next(#state { contents = C } = State, _, [M]) ->
-    NC = maps:fold(fun (K, V, Cs) -> lists:keystore(K, 1, Cs, {K, V}) end, C, M),
+    NC = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
     State#state { contents = NC }.
 
 merge_return(#state { contents = C }, [M]) ->
-    Res = maps:fold(fun (K, V, Cs) -> lists:keystore(K, 1, Cs, {K, V}) end, C, M),
+    Res = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
     lists:sort(Res).
 
 merge_features(_S, _, _) ->
@@ -327,11 +328,11 @@ find(K) ->
 find_args(#state { contents = C } = S) ->
     frequency(
        [{5, [random_key(S)]} || C /= []] ++
-       [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K,1,C) == false)} ]).
+       [{1, ?SUCHTHAT([K], [map_key()], find(K,1,C) == false)} ]).
 
 
 find_return(#state { contents = C }, [K]) ->
-    case lists:keyfind(K, 1, C) of
+    case find(K, 1, C) of
          false -> error;
          {K, V} -> {ok, V}
     end.
@@ -348,10 +349,10 @@ m_get_default(K, Default) ->
 m_get_default_args(#state { contents = C }) ->
     frequency(
       [{5, ?LET({Pair, Default}, {elements(C), make_ref()}, [element(1, Pair), Default])} || C /= [] ] ++
-      [{1, ?SUCHTHAT([K, _Default], [map_key(), make_ref()], lists:keyfind(K, 1, C) == false)}]).
+      [{1, ?SUCHTHAT([K, _Default], [map_key(), make_ref()], find(K, 1, C) == false)}]).
 
 m_get_default_return(#state { contents = C }, [K, Default]) ->
-    case lists:keyfind(K,1,C) of
+    case find(K,1,C) of
        false -> Default;
        {K, V} -> V
     end.
@@ -371,10 +372,10 @@ m_get(K) ->
 m_get_args(#state { contents = C }) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= []] ++
-      [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K,1,C) == false)}]).
+      [{1, ?SUCHTHAT([K], [map_key()], find(K,1,C) == false)}]).
 
 m_get_return(#state { contents = C }, [K]) ->
-    case lists:keyfind(K,1,C) of
+    case find(K,1,C) of
        false -> {error, bad_key};
        {K, V} -> V
     end.
@@ -446,7 +447,7 @@ update(K, V) ->
 update_args(#state { contents = C }) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair), map_value()])} || C /= [] ] ++
-      [{1,  ?SUCHTHAT([K, _V], [map_key(), map_value()], lists:keyfind(K, 1, C) == false)}]).
+      [{1,  ?SUCHTHAT([K, _V], [map_key(), map_value()], find(K, 1, C) == false)}]).
         
 update_next(#state { contents = C } = State, _, [K, V]) ->
     State#state { contents = replace_contents(K, V, C) }.
@@ -488,7 +489,7 @@ remove(K) ->
 remove_args(#state { contents = C }) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
-      [{1,  ?SUCHTHAT([K], [map_key()], lists:keyfind(K, 1, C) == false)}]).
+      [{1,  ?SUCHTHAT([K], [map_key()], find(K, 1, C) == false)}]).
         
 remove_next(#state { contents = C } = State, _, [K]) ->
     State#state { contents = del_contents(K, C) }.
@@ -524,7 +525,7 @@ is_key(K) ->
 is_key_args(#state { contents = C }) ->
     frequency(
         [{10, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
-        [{1, ?SUCHTHAT([K], [map_key()], lists:keyfind(K, 1, C) == false)}]).
+        [{1, ?SUCHTHAT([K], [map_key()], find(K, 1, C) == false)}]).
 
 is_key_return(S, [K]) ->
     member(K, S).
@@ -638,16 +639,16 @@ model_log2_size(#state { contents = Cs }) ->
 %% Various helper routines used by the model in more than one place.
 %%
 add_contents(K, V, C) ->
-    lists:keystore(K, 1, C, {K, V}).
+    store(K, 1, C, {K, V}).
 
 del_contents(K, C) ->
-    lists:keydelete(K, 1, C).
+    delete(K, 1, C).
 
 replace_contents(K, V, C) ->
-    lists:keyreplace(K, 1, C, {K, V}).
+    replace(K, 1, C, {K, V}).
 
 member(K, #state { contents = C }) ->
-    lists:keymember(K, 1, C).
+    member(K, 1, C).
 
 random_key(#state { contents = C }) ->
     ?LET(Pair, elements(C),
@@ -658,4 +659,39 @@ present(Ks, S) ->
     
 non_existing(Ks, S) ->
     lists:any(fun(K) -> not member(K, S) end, Ks).
+
+store(_T, _Pos, [], New) -> [New];
+store(T, Pos, [Tup|Next], New) ->
+    case element(Pos, Tup) =:= T of
+        true -> [New | Next];
+        false -> [Tup | store(T, Pos, Next, New)]
+    end.
+
+find(_T, _Pos, []) -> false;
+find(T, Pos, [Tup|Next]) ->
+    case element(Pos, Tup) =:= T of
+        true -> Tup;
+        false -> find(T, Pos, Next)
+    end.
+    
+member(_T, _Pos, []) -> false;
+member(T, Pos, [Tup|Next]) ->
+     case element(Pos, Tup) =:= T of
+         true -> true;
+         false -> member(T, Pos, Next)
+     end.
+
+replace(_T, _Pos, [], _New) -> [];
+replace(T, Pos, [Tup|Next], New) ->
+    case element(Pos, Tup) =:= T of
+        true -> [New | Next];
+        false -> [Tup | replace(T, Pos, Next, New)]
+    end.
+
+delete(_T, _Pos, []) -> [];
+delete(T, Pos, [Tup|Next]) ->
+    case element(Pos, Tup) =:= T of
+        true -> Next;
+        false -> [Tup | delete(T, Pos, Next)]
+    end.
 
