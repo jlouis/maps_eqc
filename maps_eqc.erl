@@ -23,7 +23,10 @@ map_term() ->
     ?SIZED(Sz, map_term(Sz)).
     
 map_term(0) ->
-    oneof([int(), atom(), binary()]);
+    oneof([
+    	int(), largeint(), atom(), binary(), bitstring(), bool(), char(),
+    	function0(int()), function2(int())
+    ]);
 map_term(K) ->
     frequency([
         {40, map_term(0)},
@@ -34,13 +37,13 @@ map_term(K) ->
 map_key() ->
     frequency([
         {1, map_term()},
-        {10, int()}
+        {10, largeint()}
     ]).
 
 map_value() ->
     frequency([
         {1, map_term()},
-        {10, int()}
+        {10, largeint()}
     ]).
 
 gen_map(KGen, VGen) ->
@@ -96,6 +99,9 @@ recall_args(#state { persist = Ps }) ->
     ?LET(Pair, elements(Ps),
        [element(1, Pair)]).
        
+recall_pre(#state { persist = Ps}, [Ref]) ->
+    lists:keyfind(Ref,1,Ps) /= Ref.
+
 recall_return(#state { persist = Ps }, [Ref]) ->
     {Ref, Cs} = lists:keyfind(Ref, 1, Ps),
     {ok, maps:from_list(Cs)}.
