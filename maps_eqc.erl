@@ -279,19 +279,20 @@ fold_features(_S, _, _) ->
 %% --------------------------------------------------------------
 
 map(F) ->
-     Res = maps_runner:map(F),
-     lists:sort(maps:to_list(Res)).
+     M = maps:map(F, maps_runner:extract()),
+     ok = maps_runner:reset(M),
+     M.
      
 map_args(_S) ->
-     [function2(map_value())].
+  ?LET(F, function2(map_value()), [F]).
      
 map_next(#state { contents = Cs } = State, _, [F]) ->
-    NCs = [{K, F(K, V)} || {K, V} <- Cs],
+    NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
     State#state { contents = NCs }.
     
 map_return(#state { contents = Cs }, [F]) ->
-    NCs = [{K, F(K, V)} || {K, V} <- Cs],
-    lists:sort(NCs).
+    NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
+    maps:from_list(NCs).
     
 map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
 

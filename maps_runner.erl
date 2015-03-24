@@ -2,7 +2,10 @@
 -behaviour(gen_server).
 
 %% Standard boilerplate stuff
--export([start_link/0, reset/0]).
+-export([
+	start_link/0,
+	reset/0, reset/1
+]).
 
 -export([init/1, code_change/3, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -29,7 +32,7 @@
 	to_list/0,
 	update/2,
 	values/0,
-	map/1,
+	%% map/1, % Implemented directly in maps_eqc
 	fold/2,
 	with/1, with_q/1,
 	without/1, without_q/1
@@ -42,14 +45,16 @@
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-    
+
+reset() -> call(reset).
+reset(M) -> call({reset, M}).
+
 extract() -> call(extract).
 eq(M) -> call({eq, M}).
 remember(Ref) -> call({remember, Ref}).
 recall(Ref) -> call({recall, Ref}).
 become(Ref) -> call({become, Ref}).
 
-reset() -> call(reset).
 size() -> call(size).
 put(K, V) -> call({put, K, V}).
 is_key(K) -> call({is_key, K}).
@@ -63,7 +68,6 @@ m_get(K, Def) -> call({get, K, Def}).
 find(K) -> call({find, K}).
 populate(Variant, Elems) -> call({populate, Variant, Elems}).
 merge(M) -> call({merge, M}).
-map(F) -> call({map, F}).
 fold(F, Init) -> call({fold, F, Init}).
 with_q(Ks) -> call({with_q, Ks}).
 with(Ks) -> call({with, Ks}).
@@ -103,6 +107,7 @@ terminate(_Reason, _State) ->
 process(extract, M) -> {M, M};
 process({eq, MIn}, M) ->
     {MIn =:= M, M};
+process({reset, M}, _) -> {ok, M};
 process(reset, _) -> {ok, #{}};
 process(size, M) -> {maps:size(M), M};
 process({put, K, V}, M) ->
@@ -144,9 +149,6 @@ process({find, K}, M) ->
 process({merge, M2}, M) ->
     Res = maps:merge(M, M2),
     {Res, Res};
-process({map, F}, M) ->
-    M2 = maps:map(F, M),
-    {M2, M2};
 process({fold, F, Init}, M) -> {maps:fold(F, Init, M), M};
 process({with_q, Ks}, M) ->
     {maps:with(Ks, M), M};
