@@ -31,8 +31,17 @@ map_term(K) ->
         {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
     ]).
 
-map_key() -> map_term().
-map_value() -> map_term().
+map_key() ->
+    frequency([
+        {1, map_term()},
+        {10, int()}
+    ]).
+
+map_value() ->
+    frequency([
+        {1, map_term()},
+        {10, int()}
+    ]).
 
 gen_map(KGen, VGen) ->
     ?LET({Perturb, K},
