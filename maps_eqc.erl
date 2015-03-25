@@ -172,7 +172,7 @@ roundtrip_features(_S, _, _) ->
 
 with(Ks) ->
     Res = maps_runner:with(Ks),
-    lists:sort(maps:to_list(Res)).
+    sort(maps:to_list(Res)).
     
 with_args(#state { contents = Cs}) ->
     case Cs of
@@ -186,7 +186,7 @@ with_next(#state { contents = Cs } = State, _, [Ks]) ->
     State#state { contents = [{K, V} || {K, V} <- Cs, lists:member(K, Ks)] }.
 
 with_return(#state { contents = Cs }, [Ks]) ->
-    lists:sort([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
+    sort([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
 
 with_features(S, [Ks], _) ->
     ["R032: with/2 on present keys" || present(Ks, S)] ++
@@ -197,7 +197,7 @@ with_features(S, [Ks], _) ->
 
 with_q(Ks) ->
     Res = maps_runner:with_q(Ks),
-    lists:sort(maps:to_list(Res)).
+    sort(maps:to_list(Res)).
     
 with_q_args(#state { contents = Cs}) ->
     case Cs of
@@ -208,7 +208,7 @@ with_q_args(#state { contents = Cs}) ->
     end.
     
 with_q_return(#state { contents = Cs }, [Ks]) ->
-    lists:sort([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
+    sort([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
     
 with_q_features(S, [Ks], _) ->
     ["R028: with/2 query on present keys" || present(Ks, S)] ++
@@ -219,7 +219,7 @@ with_q_features(S, [Ks], _) ->
 
 without(Ks) ->
     Res = maps_runner:without(Ks),
-    lists:sort(maps:to_list(Res)).
+    sort(maps:to_list(Res)).
     
 without_args(#state { contents = Cs}) ->
     case Cs of
@@ -233,7 +233,7 @@ without_next(#state { contents = Cs } = State, _, [Ks]) ->
     State#state { contents = [{K, V} || {K, V} <- Cs, not lists:member(K, Ks)] }.
 
 without_return(#state { contents = Cs }, [Ks]) ->
-    lists:sort([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
+    sort([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
 
 without_features(S, [Ks], _) ->
     ["R034: withtout/2 on present keys" || present(Ks, S)] ++
@@ -244,7 +244,7 @@ without_features(S, [Ks], _) ->
 
 without_q(Ks) ->
     Res = maps_runner:without_q(Ks),
-    lists:sort(maps:to_list(Res)).
+    sort(maps:to_list(Res)).
     
 without_q_args(#state { contents = Cs}) ->
     case Cs of
@@ -255,7 +255,7 @@ without_q_args(#state { contents = Cs}) ->
     end.
     
 without_q_return(#state { contents = Cs }, [Ks]) ->
-    lists:sort([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
+    sort([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
 
 without_q_features(S, [Ks], _) ->
     ["R030: withtout/2 query on present keys" || present(Ks, S)] ++
@@ -266,12 +266,12 @@ without_q_features(S, [Ks], _) ->
 
 fold() ->
     Res = maps_runner:fold(fun(K, V, L) -> [{K, V} | L] end, []),
-    lists:sort(Res).
+    sort(Res).
     
 fold_args(_S) -> [].
 
 fold_return(#state { contents = Cs }, _) ->
-    lists:sort(Cs).
+    sort(Cs).
     
 fold_features(_S, _, _) ->
     ["R027: traverse over the map by fold/3"].
@@ -302,7 +302,7 @@ map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
 
 merge(M) ->
     Res = maps_runner:merge(M),
-    lists:sort(maps:to_list(Res)).
+    sort(maps:to_list(Res)).
     
 merge_args(_S) ->
     ?LET(Elems, list({map_key(), map_value()}),
@@ -314,7 +314,7 @@ merge_next(#state { contents = C } = State, _, [M]) ->
 
 merge_return(#state { contents = C }, [M]) ->
     Res = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
-    lists:sort(Res).
+    sort(Res).
 
 merge_features(_S, _, _) ->
     ["R019: Merging two maps"].
@@ -388,7 +388,7 @@ m_get_features(_S, _, _) -> ["R023: get on a successful key"].
 
 populate(Variant, Elems) ->
     M = maps_runner:populate(Variant, Elems),
-    lists:sort(maps:to_list(M)).
+    sort(maps:to_list(M)).
 
 populate_pre(#state { contents = C }) -> C == [].
 
@@ -402,7 +402,7 @@ populate_next(State, _, [_Variant, Elems]) ->
 
 populate_return(_State, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
-    lists:sort(Contents).
+    sort(Contents).
 
 populate_features(_S, [Variant, M], _) ->
     Sz = interpret_size(length(M)),
@@ -424,12 +424,12 @@ interpret_size(0) -> "0".
 %% --------------------------------------------------------------
 
 values() ->
-    lists:sort(maps_runner:values()).
+    sort(maps_runner:values()).
     
 values_args(_S) -> [].
 
 values_return(#state { contents = C }, []) ->
-    lists:sort([V || {_, V} <- C]).
+    sort([V || {_, V} <- C]).
 
 values_features(_S, _, _) ->
     ["R014: values/1 called on map"].
@@ -441,7 +441,7 @@ values_features(_S, _, _) ->
 update(K, V) ->
     case maps_runner:update(K, V) of
         {error, Reason} -> {error, Reason};
-        M -> lists:sort(maps:to_list(M))
+        M -> sort(maps:to_list(M))
     end.
     
 update_args(#state { contents = C }) ->
@@ -454,7 +454,7 @@ update_next(#state { contents = C } = State, _, [K, V]) ->
 
 update_return(#state { contents = C} = S, [K, V]) ->
     case member(K, S) of
-        true -> lists:sort(replace_contents(K, V, C));
+        true -> sort(replace_contents(K, V, C));
         false -> {error, badarg}
     end.
 
@@ -469,12 +469,12 @@ update_features(S, [K, _], _) ->
 
 to_list() ->
     L  = maps_runner:to_list(),
-    lists:sort(L).
+    sort(L).
     
 to_list_args(_S) -> [].
 
 to_list_return(#state { contents = C }, []) ->
-    lists:sort(C).
+    sort(C).
 
 to_list_features(_, _, _) ->
     ["R013: to_list/1 called on map"].
@@ -484,7 +484,7 @@ to_list_features(_, _, _) ->
 
 remove(K) ->
     ResMap = maps_runner:remove(K),
-    lists:sort(maps:to_list(ResMap)).
+    sort(maps:to_list(ResMap)).
     
 remove_args(#state { contents = C }) ->
     frequency(
@@ -495,7 +495,7 @@ remove_next(#state { contents = C } = State, _, [K]) ->
     State#state { contents = del_contents(K, C) }.
 
 remove_return(#state { contents = C }, [K]) ->
-    lists:sort(del_contents(K, C)).
+    sort(del_contents(K, C)).
 
 remove_features(S, [K], _) ->
     case member(K, S) of
@@ -507,12 +507,12 @@ remove_features(S, [K], _) ->
 %% --------------------------------------------------------------
 
 keys() ->
-    lists:sort(maps_runner:keys()).
+    sort(maps_runner:keys()).
     
 keys_args(_S) -> [].
 
 keys_return(#state { contents = C }, []) ->
-    lists:sort([K || {K, _} <- C]).
+    sort([K || {K, _} <- C]).
 
 keys_features(_S, _, _) -> ["R010: Calling keys/1 on the map"].
 
@@ -538,7 +538,7 @@ is_key_features(_S, [_K], false) -> ["R002: is_key/2 on a non-existing key"].
 
 put(Key, Value) ->
     NewMap = maps_runner:put(Key, Value),
-    lists:sort(maps:to_list(NewMap)).
+    sort(maps:to_list(NewMap)).
     
 put_args(_S) ->
     [map_key(), map_value()].
@@ -547,7 +547,7 @@ put_next(#state { contents = C } = State, _, [K, V]) ->
     State#state { contents = add_contents(K, V, C) }.
 
 put_return(#state { contents = C}, [K, V]) ->
-    lists:sort(add_contents(K, V, C)).
+    sort(add_contents(K, V, C)).
 
 put_features(S, [K, _Value], _Res) ->
     case member(K, S) of
@@ -695,3 +695,4 @@ delete(T, Pos, [Tup|Next]) ->
         false -> [Tup | delete(T, Pos, Next)]
     end.
 
+sort(L) -> sort:sort(L).
