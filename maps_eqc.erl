@@ -38,13 +38,15 @@ map_term(K) ->
 map_key() ->
     frequency([
         {1, map_term()},
-        {10, largeint()}
+        {5, largeint()},
+        {5, eqc_lib:pow_2_int()}
     ]).
 
 map_value() ->
     frequency([
         {1, map_term()},
-        {10, largeint()}
+        {5, largeint()},
+        {5, eqc_lib:pow_2_int()}
     ]).
 
 gen_map(KGen, VGen) ->
@@ -695,4 +697,4 @@ delete(T, Pos, [Tup|Next]) ->
         false -> [Tup | delete(T, Pos, Next)]
     end.
 
-sort(L) -> sort:sort(L).
+sort(L) -> eqc_lib:sort(L).

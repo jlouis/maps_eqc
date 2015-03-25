@@ -1,11 +1,71 @@
--module(sort).
-
+%%% @doc Erlang QuickCheck library functions
+%%% Kept as one big module for ease of development.
+%%% @end
+-module(eqc_lib).
+-vsn("1.0.0").
 -include_lib("eqc/include/eqc.hrl").
+
 -compile(export_all).
 
+%%% BIT INTEGERS
+%%% ---------------------------------------------------------------
+%%%
+
+%% @doc pow_2_int/0 generates integers close to a power of two
+%% It turns out that integers around powers of two are often able to mess up stuff
+%% because of their bitwise representation. This generator generates integers close
+%% to a power of two deliberately.
+%% @end
+pow_2_int() ->
+    ?LET({Sign, Exponent, Perturb}, {sign(), choose(0, 128), choose(-3, 3)},
+        Sign * pow(2, Exponent) + Perturb).
+
+sign() -> elements([1, -1]).
+
+pow(0, 0) -> 0;
+pow(_Base, 0) -> 1;
+pow(Base, N) -> Base * pow(Base, N-1).
+
+%%% HEX STRING
+%%% ---------------------------------------------------------------
+
+%% @doc hex_char() generates a hexadecimal character
+%% @end
+hex_char() ->
+    elements([$0, $1, $2, $3, $4, $5, $6, $7, $8, $9, $0, $a, $b, $c, $d, $e, $f]).
+
+%% @doc hex_string/0 generates a hex string
+%% @end
+hex_string() -> list(hex_char()).
+
+%% @doc hex_string/1 generates a hexadecimal string of length `N'
+%% @end
+hex_string(N) ->
+    vector(N, hex_char()).
+
+%%% UUID
+%%% ---------------------------------------------------------------
+
+%% @doc uuid_v4() generates a v4 UUID
+%% @end
+uuid_v4() ->
+    ?LET(
+        {S1, S2, S3, S4, S5},
+        {hex_string(8), hex_string(4), hex_string(3), hex_string(3), hex_string(12)},
+            iolist_to_binary([S1, $-, S2, $-, $4, S3, $-, $a, S4, $-, S5])).
+
+%%% SORTING
+%%% ---------------------------------------------------------------
+%%%
+
+%% @doc sort/1 is a total sort function
+%% The built-in lists:sort/1 is not total, because 0 == 0.0. Since the sort function
+%% is also *stable* it can't be used to force a unique order on terms. This variant
+%% of sort has the property of total order with INTEGER < FLOAT.
+%% @end
 sort(L) ->
     lists:sort(fun(X, Y) -> erts_internal:cmp_term(X, Y) < 0 end, L).
-    
+
 prop_sorted() ->
     ?FORALL(L, maps_eqc:map_list(),
         begin
