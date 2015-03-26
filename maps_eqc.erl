@@ -23,15 +23,16 @@ map_term() ->
     ?SIZED(Sz, map_term(Sz)).
     
 map_term(0) ->
-    oneof([
-    	int(), largeint(), atom(), binary(), bitstring(), bool(), char(),
-    	real(),
-    	function0(int()), function2(int())
+    frequency([
+       {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), real()])},
+       {2, oneof([utf8(), eqc_gen:largebinary()])},
+       {1, oneof([function0(int()), function2(int())])}
     ]);
 map_term(K) ->
     frequency([
         {40, map_term(0)},
         {1, ?LAZY(list(map_term(K div 8)))},
+        {1, ?LAZY(?LET(L, list(map_term(K div 8)), list_to_tuple(L)))},
         {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
     ]).
 
