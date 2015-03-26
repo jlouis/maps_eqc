@@ -5,23 +5,25 @@
 
 -compile(export_all).
 
+-type list_map() :: list({term(), term()}).
+
 -record(state,
-    { contents = [],
-      persist = [] }).
+    { contents = [] :: list_map(), %% The current contents of the map() represented as a list
+      persist = [] :: list({reference(), list_map()}) %% Remembered older versions
+    }).
     
 initial_state() -> #state{}.
 
-%% TODO:
-%% —Extend generators and make them nastier.
-%% —Understand how real() values are handled in maps.
-%% —Initialize the property with use of 'populate' since this can uncover many bugs
-%% 
 %% GENERATORS
+
+%% The bastards of the atoms. The names here are not randomly chosen :)
 atom() -> elements([flower, hill, pyke, rivers, sand, snow, stone, storm, waters]).
 
+%% Generate sized map terms
 map_term() ->
     ?SIZED(Sz, map_term(Sz)).
     
+%% Either generate a simple scalar map term, or generate a composite map term.
 map_term(0) ->
     frequency([
        {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), real()])},
@@ -36,6 +38,7 @@ map_term(K) ->
         {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
     ]).
 
+%% Most keys are integers, but a few are map_term()'s
 map_key() ->
     frequency([
         {1, map_term()},
@@ -43,6 +46,7 @@ map_key() ->
         {5, eqc_lib:pow_2_int()}
     ]).
 
+%% Most values are integers, but a few are map_term()'s
 map_value() ->
     frequency([
         {1, map_term()},
@@ -50,6 +54,11 @@ map_value() ->
         {5, eqc_lib:pow_2_int()}
     ]).
 
+%% Maps are generated around powers of two in size. This is not coincidental
+%% because the R18 code converts from small → large maps around these points
+%% (The debug build around 3 and the real-world build around 32). By perturbing
+%% the numbers a bit around these points, we make it likely to handle conversions
+%% from one type to the other.
 gen_map(KGen, VGen) ->
     ?LET({Perturb, K},
         {choose(-3, 3),
@@ -578,8 +587,13 @@ size_features(_S, [], Sz) ->
 
 %% WEIGHT
 %% -------------------------------------------------------------
+%% Weighting makes sure that certain operations occur less often because they
+%% are susceptible to "hiding" real problems by destroying the part of the map
+%% with the problem. We do call them from time to time however.
+
+%% Population can only happen from the empty map, so it is very likely to fire
 weight(_S, populate) -> 200;
-%% Make operations which alter the map a lot less likely
+%% Make map-altering operations with great impact unlikely 
 weight(_S, with) -> 1;
 weight(_S, without) -> 1;
 %% Consistency checks probably find stuff even if called a bit rarer
@@ -599,9 +613,13 @@ weight(_S, _) -> 10.
 
 %% PROPERTY
 %% -------------------------------------------------------------
+
+%% Common postcondition for all commands. We always report failures as
+%% "Res /= Expected".
 postcondition_common(S, Call, Res) ->
     eq(Res, return_value(S, Call)).
 
+%% Main property:
 prop_map() ->
     ?SETUP(fun() ->
         {ok, Pid} = maps_runner:start_link(),
@@ -632,6 +650,9 @@ model_log2_size(#state { contents = Cs }) ->
 %% 
 %% Various helper routines used by the model in more than one place.
 %%
+%% These implements list-operations on which =:= is used over == to make sure
+%% that 0 and 0.0 compares as different elements. This lets us use lists as an
+%% isomorphic representation of maps in the model.
 add_contents(K, V, C) ->
     store(K, 1, C, {K, V}).
 
