@@ -100,7 +100,7 @@ recall_args(#state { persist = Ps }) ->
        [element(1, Pair)]).
        
 recall_pre(#state { persist = Ps}, [Ref]) ->
-    lists:keyfind(Ref,1,Ps) /= Ref.
+    lists:keyfind(Ref,1,Ps) /= false.
 
 recall_return(#state { persist = Ps }, [Ref]) ->
     {Ref, Cs} = lists:keyfind(Ref, 1, Ps),
