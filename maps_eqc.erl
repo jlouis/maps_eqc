@@ -23,12 +23,18 @@ atom() -> elements([flower, hill, pyke, rivers, sand, snow, stone, storm, waters
 map_term() ->
     ?SIZED(Sz, map_term(Sz)).
     
+evil_real() ->
+   frequency([
+     {20, real()},
+     {1, return(0.0)},
+     {1, return(0.0/-1)}]).
+
 %% Either generate a simple scalar map term, or generate a composite map term.
 map_term(0) ->
     frequency([
-       {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), real()])},
-       {2, oneof([utf8(), eqc_gen:largebinary()])},
-       {1, oneof([function0(int()), function2(int())])}
+       {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])}
+       %% {2, oneof([utf8(), eqc_gen:largebinary()])},
+       %% {1, oneof([function0(int()), function2(int())])}
     ]);
 map_term(K) ->
     frequency([
@@ -38,30 +44,19 @@ map_term(K) ->
         {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
     ]).
 
-%% Most keys are integers, but a few are map_term()'s
-map_key() ->
-    frequency([
-        {1, map_term()},
-        {5, largeint()},
-        {5, eqc_lib:pow_2_int()}
-    ]).
+%% Prefer map terms. They are slower to generate but cover far more ground w.r.t
+%% correctness.
+map_key() -> map_term().
+map_value() -> map_term().
 
-%% Most values are integers, but a few are map_term()'s
-map_value() ->
-    frequency([
-        {1, map_term()},
-        {5, largeint()},
-        {5, eqc_lib:pow_2_int()}
-    ]).
-
-%% Maps are generated around powers of two in size. This is not coincidental
+%% Maps are generated with a resized list generator. This is not coincidental
 %% because the R18 code converts from small → large maps around these points
-%% (The debug build around 3 and the real-world build around 32). By perturbing
-%% the numbers a bit around these points, we make it likely to handle conversions
-%% from one type to the other.
+%% (The debug build around 3 and the real-world build around 32).
 gen_map(KGen, VGen) ->
   ?SIZED(Sz, resize(Sz * 7, list({KGen, VGen}))).
   	
+%% Default way to generate a list which can subsequently be used to populate
+%% a map.
 map_list() ->
     gen_map(map_key(), map_value()).
 
@@ -161,6 +156,47 @@ roundtrip_return(_S, []) ->
     
 roundtrip_features(_S, _, _) ->
     ["R037: Maps sent roundtrip through another process are reflexive"].
+
+%% POPULATE
+%% --------------------------------------------------------------
+%%
+%% Empty maps can be "kickstarted" by quickly populating them. The meta-command
+%% allows us to handle a lot of size-corner cases quickly. This checks
+%% maps:from_list/1 as well as another variant where the map is filled by running
+%% maps:put/3 in succession over the map.
+%%
+populate(Variant, Elems) ->
+    maps_runner:populate(Variant, Elems).
+
+populate_pre(#state { contents = C }) -> C == [].
+
+populate_args(_S) ->
+  [oneof([from_list, puts]),
+   map_list()].
+    
+populate_next(State, _, [_Variant, Elems]) ->
+    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
+    State#state { contents = Contents }.
+
+populate_return(_State, [_Variant, Elems]) ->
+    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
+    maps:from_list(Contents).
+
+populate_features(_S, [Variant, M], _) ->
+    Sz = interpret_size(length(M)),
+    case Variant of
+        from_list -> ["R017x: populating an empty map with from_list/1 of size: " ++ Sz];
+        puts -> ["R018x: populating an empty map with put/2 size: " ++ Sz]
+    end.
+
+interpret_size(Sz) when Sz >= 64 -> "64+";
+interpret_size(Sz) when Sz >= 32 -> "32+";
+interpret_size(Sz) when Sz >= 16 -> "16+";
+interpret_size(Sz) when Sz >= 8 -> "8+";
+interpret_size(Sz) when Sz >= 4 -> "4+";
+interpret_size(Sz) when Sz >= 2 -> "2+";
+interpret_size(Sz) when Sz >= 1 -> "1+";
+interpret_size(0) -> "0".
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% COMMAND SECTION
@@ -380,42 +416,6 @@ m_get_return(#state { contents = C }, [K]) ->
 
 m_get_features(_S, _, {error, bad_key}) -> ["R022: get/2 on a non-existing key"];
 m_get_features(_S, _, _) -> ["R023: get on a successful key"].
-
-%% POPULATE
-%% --------------------------------------------------------------
-
-populate(Variant, Elems) ->
-    maps_runner:populate(Variant, Elems).
-
-populate_pre(#state { contents = C }) -> C == [].
-
-populate_args(_S) ->
-  [oneof([from_list, puts]),
-   map_list()].
-    
-populate_next(State, _, [_Variant, Elems]) ->
-    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
-    State#state { contents = Contents }.
-
-populate_return(_State, [_Variant, Elems]) ->
-    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
-    maps:from_list(Contents).
-
-populate_features(_S, [Variant, M], _) ->
-    Sz = interpret_size(length(M)),
-    case Variant of
-        from_list -> ["R017x: populating an empty map with from_list/1 of size: " ++ Sz];
-        puts -> ["R018x: populating an empty map with put/2 size: " ++ Sz]
-    end.
-
-interpret_size(Sz) when Sz >= 64 -> "64+";
-interpret_size(Sz) when Sz >= 32 -> "32+";
-interpret_size(Sz) when Sz >= 16 -> "16+";
-interpret_size(Sz) when Sz >= 8 -> "8+";
-interpret_size(Sz) when Sz >= 4 -> "4+";
-interpret_size(Sz) when Sz >= 2 -> "2+";
-interpret_size(Sz) when Sz >= 1 -> "1+";
-interpret_size(0) -> "0".
 
 %% VALUES
 %% --------------------------------------------------------------
