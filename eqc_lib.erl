@@ -2,7 +2,7 @@
 %%% Kept as one big module for ease of development.
 %%% @end
 -module(eqc_lib).
--vsn("1.1.0").
+-vsn("1.1.1").
 -include_lib("eqc/include/eqc.hrl").
 
 -compile(export_all).
@@ -142,6 +142,6 @@ out_sl([{C, Elems} | Next]) ->
     Line = io_lib:format("~4.B | ~s~n", [C, leaves(lists:sort(Elems))]),
     [Line | out_sl(Next)].
 
-leaves(Elems) when length(Elems) > 66 -> "*** (more than 66 elements)";
+leaves(Elems) when length(Elems) > 66 -> "*** (" ++ integer_to_list(length(Elems)) ++ ")";
 leaves(Elems) ->
     [E + $0 || E <- Elems].
