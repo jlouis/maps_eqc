@@ -2,7 +2,7 @@
 %%% Kept as one big module for ease of development.
 %%% @end
 -module(eqc_lib).
--vsn("1.0.0").
+-vsn("1.1.0").
 -include_lib("eqc/include/eqc.hrl").
 
 -compile(export_all).
@@ -112,3 +112,36 @@ cmp_term_list([], _) -> true;
 cmp_term_list(_, []) -> false;
 cmp_term_list([X|Xs], [Y|Ys]) when X =:= Y -> cmp_term_list(Xs, Ys);
 cmp_term_list([X|_], [Y|_]) -> cmp_term(X, Y).
+
+stem_and_leaf(Title) ->
+  fun(Counts) ->
+    io:format("~s", [
+    [atom_to_list(Title), $\n, $\n,
+     "Stem | Leaf\n",
+     "----------------\n",
+     (out_stem_and_leaf(stem_and_leaf_collect(Counts, #{})))]])
+  end.
+    
+stem_and_leaf_collect([{C, 1}|Cs], Bins) ->
+    stem_and_leaf_collect(Cs, store_bin(C div 10, C rem 10, Bins));
+stem_and_leaf_collect([{C, K} | Cs], Bins) ->
+    stem_and_leaf_collect([{C, K-1} | Cs], store_bin(C div 10, C rem 10, Bins));
+stem_and_leaf_collect([], Bins) -> Bins.
+
+store_bin(D, R, Bins) ->
+    case maps:find(D, Bins) of
+        {ok, L} -> maps:put(D, [R | L], Bins);
+        error -> maps:put(D, [R], Bins)
+    end.
+
+out_stem_and_leaf(Bins) ->
+    out_sl(lists:sort(maps:to_list(Bins))).
+    
+out_sl([]) -> [];
+out_sl([{C, Elems} | Next]) ->
+    Line = io_lib:format("~4.B | ~s~n", [C, leaves(lists:sort(Elems))]),
+    [Line | out_sl(Next)].
+
+leaves(Elems) when length(Elems) > 66 -> "*** (more than 66 elements)";
+leaves(Elems) ->
+    [E + $0 || E <- Elems].
