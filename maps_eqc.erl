@@ -31,11 +31,12 @@ evil_real() ->
 
 %% Either generate a simple scalar map term, or generate a composite map term.
 map_term(0) ->
-    frequency([
-       {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])}
-       %% {2, oneof([utf8(), eqc_gen:largebinary()])},
-       %% {1, oneof([function0(int()), function2(int())])}
-    ]);
+    int();
+%%     frequency([
+%%        {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])}
+%%        {2, oneof([utf8(), eqc_gen:largebinary()])},
+%%        {1, oneof([function0(int()), function2(int())])}
+%%     ]);
 map_term(K) ->
     frequency([
         {40, map_term(0)},
@@ -46,8 +47,8 @@ map_term(K) ->
 
 %% Prefer map terms. They are slower to generate but cover far more ground w.r.t
 %% correctness.
-map_key() -> map_term().
-map_value() -> map_term().
+map_key() -> oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()]).
+map_value() -> int().
 
 %% Maps are generated with a resized list generator. This is not coincidental
 %% because the R18 code converts from small → large maps around these points
