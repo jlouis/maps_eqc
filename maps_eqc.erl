@@ -31,12 +31,11 @@ evil_real() ->
 
 %% Either generate a simple scalar map term, or generate a composite map term.
 map_term(0) ->
-    int();
-%%     frequency([
-%%        {10, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])}
-%%        {2, oneof([utf8(), eqc_gen:largebinary()])},
-%%        {1, oneof([function0(int()), function2(int())])}
-%%     ]);
+    frequency([
+       {100, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])},
+       {10, oneof([function0(int()), function2(int())])},
+       {10, eqc_gen:largebinary()}
+    ]);
 map_term(K) ->
     frequency([
         {40, map_term(0)},
@@ -45,21 +44,30 @@ map_term(K) ->
         {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
     ]).
 
+%% Simple map terms picks simple representations most of the time
+simple_map_term() ->
+   frequency([
+       {5, int()},
+       {5, largeint()},
+       {1, map_term()}]).
+
 %% Prefer map terms. They are slower to generate but cover far more ground w.r.t
 %% correctness.
-map_key() -> oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()]).
-map_value() -> int().
+map_key() -> simple_map_term().
+map_value() -> simple_map_term().
 
 %% Maps are generated with a resized list generator. This is not coincidental
 %% because the R18 code converts from small → large maps around these points
 %% (The debug build around 3 and the real-world build around 32).
-gen_map(KGen, VGen) ->
-  ?SIZED(Sz, resize(Sz * 7, list({KGen, VGen}))).
+%% Note we resize the generator back for the keys and values so they are normally
+%% sized.
+gen_map() ->
+  ?SIZED(Sz, resize(Sz * 10, list({resize(Sz, map_key()), resize(Sz, map_value())}))).
   	
 %% Default way to generate a list which can subsequently be used to populate
 %% a map.
 map_list() ->
-    gen_map(map_key(), map_value()).
+    gen_map().
 
 map_map() ->
     ?LET(ML, map_list(), maps:from_list(ML)).
