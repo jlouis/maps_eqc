@@ -631,21 +631,14 @@ prop_map() ->
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
-          collect(with_title('Final log2 size'), model_log2_size(S),
+          collect(eqc_lib:stem_and_leaf('Final map size'), model_size(S),
           collect(eqc_lib:stem_and_leaf('Command Length'), length(Cmds),
           aggregate(with_title('Commands'), command_names(Cmds),
           aggregate(with_title('Features'), call_features(H),
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
         end)).
 
-model_log2_size(#state { contents = Cs }) ->
-     case length(Cs) of
-         0 -> 0;
-         L ->
-             Sz = math:log10(L) / math:log10(2), %% Convert to log2 from log10
-             round(Sz)
-     end.
-
+model_size(#state { contents = Cs }) -> length(Cs).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HELPER ROUTINES
