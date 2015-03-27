@@ -591,6 +591,8 @@ size_features(_S, [], Sz) ->
 %% are susceptible to "hiding" real problems by destroying the part of the map
 %% with the problem. We do call them from time to time however.
 
+%% Currently disabled commands
+weight(_S, map) -> 0;
 %% Population can only happen from the empty map, so it is very likely to fire
 weight(_S, populate) -> 200;
 %% Make map-altering operations with great impact unlikely 
