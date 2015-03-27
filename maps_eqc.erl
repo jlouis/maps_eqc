@@ -191,21 +191,11 @@ populate_return(_State, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
     maps:from_list(Contents).
 
-populate_features(_S, [Variant, M], _) ->
-    Sz = interpret_size(length(M)),
+populate_features(_S, [Variant, _M], _) ->
     case Variant of
-        from_list -> ["R017x: populating an empty map with from_list/1 of size: " ++ Sz];
-        puts -> ["R018x: populating an empty map with put/2 size: " ++ Sz]
+        from_list -> ["R017: populating an empty map with from_list/1"];
+        puts -> ["R018: populating an empty map with put/2"]
     end.
-
-interpret_size(Sz) when Sz >= 64 -> "64+";
-interpret_size(Sz) when Sz >= 32 -> "32+";
-interpret_size(Sz) when Sz >= 16 -> "16+";
-interpret_size(Sz) when Sz >= 8 -> "8+";
-interpret_size(Sz) when Sz >= 4 -> "4+";
-interpret_size(Sz) when Sz >= 2 -> "2+";
-interpret_size(Sz) when Sz >= 1 -> "1+";
-interpret_size(0) -> "0".
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% COMMAND SECTION

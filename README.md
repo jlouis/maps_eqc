@@ -35,8 +35,8 @@ We currently test against the following features:
 	R014: values/1 called on map
 	R015: update/3 on an existing key
 	R016: update/3 on a non-existing key
-	R017x: populating an empty map with from_list/1 of size: " ++ Sz
-	R018x: populating an empty map with put/2 size: " ++ Sz
+	R017: populating an empty map with from_list/1
+	R018: populating an empty map with put/2
 	R019: Merging two maps
 	R020: find on a non-existing key
 	R021: find on an existing key
