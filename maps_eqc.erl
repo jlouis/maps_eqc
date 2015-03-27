@@ -60,16 +60,7 @@ map_value() ->
 %% the numbers a bit around these points, we make it likely to handle conversions
 %% from one type to the other.
 gen_map(KGen, VGen) ->
-    ?LET({Perturb, K},
-        {choose(-3, 3),
-         frequency([
-  	     {10, 4},
-  	     {10, 8},
-  	     {10, 32},
-  	     {5, 64},
-  	     {5, 256},
-  	     {20, nat()}])},
-  	vector(abs(K + Perturb), {KGen, VGen})).
+  ?SIZED(Sz, resize(Sz * 7, list({KGen, VGen}))).
   	
 map_list() ->
     gen_map(map_key(), map_value()).
