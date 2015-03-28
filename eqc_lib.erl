@@ -2,7 +2,7 @@
 %%% Kept as one big module for ease of development.
 %%% @end
 -module(eqc_lib).
--vsn("1.1.1").
+-vsn("1.1.2").
 -include_lib("eqc/include/eqc.hrl").
 
 -compile(export_all).
@@ -139,9 +139,19 @@ out_stem_and_leaf(Bins) ->
     
 out_sl([]) -> [];
 out_sl([{C, Elems} | Next]) ->
-    Line = io_lib:format("~4.B | ~s~n", [C, leaves(lists:sort(Elems))]),
+    Line = io_lib:format("~4.B | ~ts~n", [C, leaves(lists:sort(Elems))]),
     [Line | out_sl(Next)].
 
-leaves(Elems) when length(Elems) > 66 -> "*** (" ++ integer_to_list(length(Elems)) ++ ")";
+leaves([E | Es] = Elems) when length(Elems) > 66 -> ["*** ", rle(Es, E, 1)];
 leaves(Elems) ->
     [E + $0 || E <- Elems].
+
+rle([E | Es], E, Cnt) ->
+    rle(Es, E, Cnt+1);
+rle([Ez | Es], E, Cnt) ->
+    [rle_out(E, Cnt), " " | rle(Es, Ez, 1)];
+rle([], E, Cnt) ->
+    [rle_out(E, Cnt)].
+
+rle_out(E, Cnt) ->
+    [integer_to_list(E), <<"·("/utf8>>, integer_to_list(Cnt), ")"].
