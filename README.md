@@ -9,6 +9,15 @@ interest.
 
 Quviq Erlang QuickCheck 1.33.3 or higher I think. May work on earlier versions of QuickCheck. The stateful nature and grouped commands are not supported well in either Triq or Proper. Furthermore, it would be neat to extend the model with feature–support in the longer run, and this is not supported either.
 
+## Running the test
+
+I often just do the following:
+
+	cd src
+	erl
+	1> make:all([load]).
+	2> eqc:module({testing_budget, 15}, maps_eqc).
+
 ## Status
 
 The current model crashes `OTP-17.4.1-1428-g7409949` with a segmentation fault. I have yet to figure out what is wrong, but something is wrong.
