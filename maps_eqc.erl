@@ -62,7 +62,7 @@ map_value() -> simple_map_term().
 %% Note we resize the generator back for the keys and values so they are normally
 %% sized.
 gen_map() ->
-  ?SIZED(Sz, resize(Sz * 10, list({resize(Sz, map_key()), resize(Sz, map_value())}))).
+  ?SIZED(Sz, resize(Sz * 15, list({resize(Sz, map_key()), resize(Sz, map_value())}))).
   	
 %% Default way to generate a list which can subsequently be used to populate
 %% a map.

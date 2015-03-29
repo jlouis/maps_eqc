@@ -113,6 +113,16 @@ cmp_term_list(_, []) -> false;
 cmp_term_list([X|Xs], [Y|Ys]) when X =:= Y -> cmp_term_list(Xs, Ys);
 cmp_term_list([X|_], [Y|_]) -> cmp_term(X, Y).
 
+
+%% STEM AND LEAF PLOTS
+%% ------------------------------------------------------
+%%
+%% If you are collecting lots of values, you may often want to show the distribution of those
+%% values. A stem & leaf plot allows you to handle this easily. Use it like you would use the
+%% with_title/1 printer:
+%%
+%% collect(stem_and_leaf('Command Length'), length(Cmds), …)
+%%
 stem_and_leaf(Title) ->
   fun(Counts) ->
     io:format("~s", [
