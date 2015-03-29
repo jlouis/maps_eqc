@@ -1,0 +1,9 @@
+{application, maps_eqc,
+ [{description, "Quickcheck testing of maps"},
+  {vsn, "1"},
+  {modules, []},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {mod, {maps_eqc, []}},
+  {env, []}
+ ]}.
