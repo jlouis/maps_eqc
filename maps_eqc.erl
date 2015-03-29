@@ -44,17 +44,9 @@ map_term(K) ->
         {1, ?LAZY(eqc_gen:map(map_term(K div 8), map_term(K div 8)))}
     ]).
 
-%% Simple map terms picks simple representations most of the time
-simple_map_term() ->
-   frequency([
-       {5, int()},
-       {5, largeint()},
-       {1, map_term()}]).
-
-%% Prefer map terms. They are slower to generate but cover far more ground w.r.t
-%% correctness.
-map_key() -> simple_map_term().
-map_value() -> simple_map_term().
+%% Keys and values are map terms
+map_key() -> map_term().
+map_value() -> map_term().
 
 %% Maps are generated with a resized list generator. This is not coincidental
 %% because the R18 code converts from small → large maps around these points
