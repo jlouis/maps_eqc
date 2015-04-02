@@ -14,14 +14,18 @@
 
 -define(LARGE_MAP_RANGE, 65536*65536).
 
-initial_state(K, RS) ->
-    Contents = large_map(RS, K, ?LARGE_MAP_RANGE),
+initial_state(K, RS, {FK, FV}) ->
+    Contents = large_map(RS, K, ?LARGE_MAP_RANGE, FK, FV),
     M = maps:from_list(Contents),
     #state { contents = maps:to_list(M) }.
 
 state() ->
-    ?LET({Sz, RS}, {frequency([{10, 0}, {2, 100}, {1, 1000}, {1, 5000}, {1, 15000}, {1, 25000}]), rand_seed(exs64)},
-       initial_state(Sz, RS)).
+    ?LET({Sz, RS, FK, FV},
+         {frequency([{10, 0}, {2, 100}, {1, 1000}, {1, 5000}, {1, 15000}, {1, 25000}]),
+          rand_seed(exs64),
+          function1(map_key()),
+          function1(map_value())},
+       initial_state(Sz, RS, {FK, FV})).
 
 initial_state() ->
     #state{}.
