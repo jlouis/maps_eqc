@@ -9,14 +9,17 @@ interest.
 
 Quviq Erlang QuickCheck 1.33.3 or higher I think. May work on earlier versions of QuickCheck. The stateful nature and grouped commands are not supported well in either Triq or Proper. Furthermore, it would be neat to extend the model with feature–support in the longer run, and this is not supported either.
 
+Needs rebar3 for the full compile.
+
 ## Running the test
 
 I often just do the following:
 
-	cd src
-	erl
-	1> make:all([load]).
-	2> eqc:module({testing_budget, 15}, maps_eqc).
+	rebar3 shell
+	1> eqc:module({testing_budget, 15}, maps_eqc).
+	…
+	2> c("src/maps_large_iso_eqc.erl").
+	3> eqc:module(maps_large_iso_eqc).
 
 ## Status
 

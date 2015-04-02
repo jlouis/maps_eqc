@@ -11,7 +11,7 @@
     { contents = [] :: list_map(), %% The current contents of the map() represented as a list
       persist = [] :: list({reference(), list_map()}) %% Remembered older versions
     }).
-    
+
 initial_state() -> #state{}.
 
 %% GENERATORS
@@ -22,7 +22,7 @@ atom() -> elements([flower, hill, pyke, rivers, sand, snow, stone, storm, waters
 %% Generate sized map terms
 map_term() ->
     ?SIZED(Sz, map_term(Sz)).
-    
+
 evil_real() ->
    frequency([
      {20, real()},
