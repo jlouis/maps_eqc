@@ -12,7 +12,19 @@
       persist = [] :: list({reference(), list_map()}) %% Remembered older versions
     }).
 
-initial_state() -> #state{}.
+-define(LARGE_MAP_RANGE, 65536*65536).
+
+initial_state(K, RS) ->
+    Contents = large_map(RS, K, ?LARGE_MAP_RANGE),
+    M = maps:from_list(Contents),
+    #state { contents = maps:to_list(M) }.
+
+state() ->
+    ?LET({Sz, RS}, {frequency([{10, 0}, {2, 100}, {1, 1000}, {1, 5000}, {1, 15000}, {1, 25000}]), rand_seed(exs64)},
+       initial_state(Sz, RS)).
+
+initial_state() ->
+    #state{}.
 
 %% GENERATORS
 
@@ -644,6 +656,23 @@ prop_map() ->
           aggregate(with_title('Features'), call_features(H),
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
         end)).
+
+prop_map_large() ->
+    ?SETUP(fun() ->
+        {ok, Pid} = maps_runner:start_link(),
+        fun() -> exit(Pid, kill) end
+    end,
+      ?FORALL(InitState, state(),
+      ?FORALL(Cmds, more_commands(2, commands(?MODULE, InitState)),
+        begin
+          maps_runner:reset(maps:from_list(InitState#state.contents)),
+          {H,S,R} = run_commands(?MODULE, Cmds),
+          collect(eqc_lib:stem_and_leaf('Final map size'), model_size(S),
+          collect(eqc_lib:stem_and_leaf('Command Length'), length(Cmds),
+          aggregate(with_title('Commands'), command_names(Cmds),
+          aggregate(with_title('Features'), call_features(H),
+              pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
+        end))).
 
 model_size(#state { contents = Cs }) -> length(Cs).
 
