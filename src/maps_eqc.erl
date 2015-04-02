@@ -64,6 +64,31 @@ map_list() ->
 map_map() ->
     ?LET(ML, map_list(), maps:from_list(ML)).
 
+rand_seed() ->
+    %% Should really be integers, but we shouldn't care.
+    %% It never makes sense to shrink these down at all,
+    %% so request we never shrink these values.
+    noshrink({nat(), nat(), nat()}).
+    
+%% Generate a random seed value
+rand_seed(Alg) ->
+    ?LET(Seed, rand_seed(),
+        rand:seed_s(Alg, Seed)).
+        
+%% Generate a large map of size K with function as key/value generators
+large_map(RandState, K, N) ->
+    large_map(RandState, K, N, fun(X) -> X end, fun(X) -> X end, []).
+
+large_map(RandState, K, N, FK, FV) ->
+    large_map(RandState, K, N, FK, FV, []).
+
+large_map(_RandState, 0, _N, _FK, _FV, Acc) -> Acc;
+large_map(RandState, K, N, FK, FV, Acc) ->
+    {KK, RS1} = rand:uniform_s(N, RandState),
+    {KV, RS2} = rand:uniform_s(N, RS1),
+    large_map(RS2, K-1, N, FK, FV, [{FK(KK), FV(KV)} | Acc]).
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% META-COMMAND SECTION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
