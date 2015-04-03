@@ -8,27 +8,30 @@
 -type list_map() :: list({term(), term()}).
 
 -record(state,
-    { contents = [] :: list_map(), %% The current contents of the map() represented as a list
+    { collisions = [],
+      contents = [] :: list_map(), %% The current contents of the map() represented as a list
       persist = [] :: list({reference(), list_map()}) %% Remembered older versions
     }).
 
 -define(LARGE_MAP_RANGE, 65536*65536).
 
-initial_state(K, RS, {FK, FV}) ->
-    Contents = large_map(RS, K, ?LARGE_MAP_RANGE, FK, FV),
+initial_state(K, RS, Funs) ->
+    Contents =
+      case Funs of
+         undefined -> large_map(RS, K, ?LARGE_MAP_RANGE);
+         {FK, FV} -> large_map(RS, K, ?LARGE_MAP_RANGE, FK, FV)
+      end,
     M = maps:from_list(Contents),
     #state { contents = maps:to_list(M) }.
 
 state() ->
-    ?LET({Sz, RS, FK, FV},
-         {frequency([{10, 0}, {2, 100}, {1, 1000}, {1, 5000}, {1, 15000}, {1, 25000}]),
-          rand_seed(exs64),
-          function1(map_key()),
-          function1(map_value())},
-       initial_state(Sz, RS, {FK, FV})).
+    ?LET({Sz, RS},
+         {oneof([15000, 25000]), rand_seed(exs64)},
+       initial_state(Sz, RS, undefined)).
 
 initial_state() ->
-    #state{}.
+    Colliding = get(colliding_terms),
+    #state{ collisions = Colliding }.
 
 %% GENERATORS
 
@@ -62,6 +65,9 @@ map_term(K) ->
 
 %% Keys and values are map terms
 map_key() -> map_term().
+map_key({C1, C2}) ->
+    oneof([map_term(), oneof([elements(C1), elements(C2)])]).
+
 map_value() -> map_term().
 
 %% Maps are generated with a resized list generator. This is not coincidental
@@ -69,16 +75,16 @@ map_value() -> map_term().
 %% (The debug build around 3 and the real-world build around 32).
 %% Note we resize the generator back for the keys and values so they are normally
 %% sized.
-gen_map() ->
-  ?SIZED(Sz, resize(Sz * 15, list({resize(Sz, map_key()), resize(Sz, map_value())}))).
+gen_map(Collisions) ->
+  ?SIZED(Sz, resize(Sz * 15, list({resize(Sz, map_key(Collisions)), resize(Sz, map_value())}))).
   	
 %% Default way to generate a list which can subsequently be used to populate
 %% a map.
-map_list() ->
-    gen_map().
+map_list(Collisions) ->
+    gen_map(Collisions).
 
-map_map() ->
-    ?LET(ML, map_list(), maps:from_list(ML)).
+map_map(Collisions) ->
+    ?LET(ML, map_list(Collisions), maps:from_list(ML)).
 
 rand_seed() ->
     %% Should really be integers, but we shouldn't care.
@@ -212,9 +218,9 @@ populate(Variant, Elems) ->
 
 populate_pre(#state { contents = C }) -> C == [].
 
-populate_args(_S) ->
+populate_args(#state { collisions = Cols }) ->
   [oneof([from_list, puts]),
-   map_list()].
+   map_list(Cols)].
     
 populate_next(State, _, [_Variant, Elems]) ->
     Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
@@ -244,11 +250,11 @@ populate_features(_S, [Variant, _M], _) ->
 with(Ks) ->
     maps_runner:with(Ks).
     
-with_args(#state { contents = Cs}) ->
+with_args(#state { collisions = Cols, contents = Cs}) ->
     case Cs of
-        [] -> [list(map_key())];
+        [] -> [list(map_key(Cols))];
         Cs ->
-          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+          ?LET({P, N}, {list(elements(Cs)), list(map_key(Cols))},
              [P ++ N])
     end.
     
@@ -268,11 +274,11 @@ with_features(S, [Ks], _) ->
 with_q(Ks) ->
     maps_runner:with_q(Ks).
     
-with_q_args(#state { contents = Cs}) ->
+with_q_args(#state { collisions = Cols, contents = Cs}) ->
     case Cs of
-        [] -> [list(map_key())];
+        [] -> [list(map_key(Cols))];
         Cs ->
-          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+          ?LET({P, N}, {list(elements(Cs)), list(map_key(Cols))},
              [P ++ N])
     end.
     
@@ -289,11 +295,11 @@ with_q_features(S, [Ks], _) ->
 without(Ks) ->
     maps_runner:without(Ks).
     
-without_args(#state { contents = Cs}) ->
+without_args(#state { collisions = Cols, contents = Cs}) ->
     case Cs of
-        [] -> [list(map_key())];
+        [] -> [list(map_key(Cols))];
         Cs ->
-          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+          ?LET({P, N}, {list(elements(Cs)), list(map_key(Cols))},
              [P ++ N])
     end.
     
@@ -313,11 +319,11 @@ without_features(S, [Ks], _) ->
 without_q(Ks) ->
     maps_runner:without_q(Ks).
     
-without_q_args(#state { contents = Cs}) ->
+without_q_args(#state { collisions = Cols, contents = Cs}) ->
     case Cs of
-        [] -> [list(map_key())];
+        [] -> [list(map_key(Cols))];
         Cs ->
-          ?LET({P, N}, {list(elements(Cs)), list(map_key())},
+          ?LET({P, N}, {list(elements(Cs)), list(map_key(Cols))},
              [P ++ N])
     end.
     
@@ -370,8 +376,8 @@ map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
 merge(M) ->
     maps_runner:merge(M).
     
-merge_args(_S) ->
-    ?LET(Elems, list({map_key(), map_value()}),
+merge_args(#state { collisions = Cols }) ->
+    ?LET(Elems, list({map_key(Cols), map_value()}),
         [maps:from_list(Elems)]).
         
 merge_next(#state { contents = C } = State, _, [M]) ->
@@ -391,10 +397,10 @@ merge_features(_S, _, _) ->
 find(K) ->
     maps_runner:find(K).
 
-find_args(#state { contents = C } = S) ->
+find_args(#state { collisions = Cols, contents = C } = S) ->
     frequency(
        [{5, [random_key(S)]} || C /= []] ++
-       [{1, ?SUCHTHAT([K], [map_key()], find(K,1,C) == false)} ]).
+       [{1, ?SUCHTHAT([K], [map_key(Cols)], find(K,1,C) == false)} ]).
 
 
 find_return(#state { contents = C }, [K]) ->
@@ -412,10 +418,10 @@ find_features(_S, _, {ok, _V}) -> ["R021: find on an existing key"].
 m_get_default(K, Default) ->
     maps_runner:m_get(K, Default).
 
-m_get_default_args(#state { contents = C }) ->
+m_get_default_args(#state { collisions = Cols, contents = C }) ->
     frequency(
       [{5, ?LET({Pair, Default}, {elements(C), make_ref()}, [element(1, Pair), Default])} || C /= [] ] ++
-      [{1, ?SUCHTHAT([K, _Default], [map_key(), make_ref()], find(K, 1, C) == false)}]).
+      [{1, ?SUCHTHAT([K, _Default], [map_key(Cols), make_ref()], find(K, 1, C) == false)}]).
 
 m_get_default_return(#state { contents = C }, [K, Default]) ->
     case find(K,1,C) of
@@ -435,10 +441,10 @@ m_get_default_features(S, [K, _Default], _) ->
 m_get(K) ->
     maps_runner:m_get(K).
 
-m_get_args(#state { contents = C }) ->
+m_get_args(#state { collisions = Cols, contents = C }) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= []] ++
-      [{1, ?SUCHTHAT([K], [map_key()], find(K,1,C) == false)}]).
+      [{1, ?SUCHTHAT([K], [map_key(Cols)], find(K,1,C) == false)}]).
 
 m_get_return(#state { contents = C }, [K]) ->
     case find(K,1,C) of
@@ -472,10 +478,10 @@ update(K, V) ->
         M -> M
     end.
     
-update_args(#state { contents = C }) ->
+update_args(#state { collisions = Cols, contents = C }) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair), map_value()])} || C /= [] ] ++
-      [{1,  ?SUCHTHAT([K, _V], [map_key(), map_value()], find(K, 1, C) == false)}]).
+      [{1,  ?SUCHTHAT([K, _V], [map_key(Cols), map_value()], find(K, 1, C) == false)}]).
         
 update_next(#state { contents = C } = State, _, [K, V]) ->
     State#state { contents = replace_contents(K, V, C) }.
@@ -513,10 +519,10 @@ to_list_features(_, _, _) ->
 remove(K) ->
     maps_runner:remove(K).
     
-remove_args(#state { contents = C }) ->
+remove_args(#state { collisions = Cols, contents = C }) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
-      [{1,  ?SUCHTHAT([K], [map_key()], find(K, 1, C) == false)}]).
+      [{1,  ?SUCHTHAT([K], [map_key(Cols)], find(K, 1, C) == false)}]).
         
 remove_next(#state { contents = C } = State, _, [K]) ->
     State#state { contents = del_contents(K, C) }.
@@ -549,10 +555,10 @@ keys_features(_S, _, _) -> ["R010: Calling keys/1 on the map"].
 is_key(K) ->
     maps_runner:is_key(K).
     
-is_key_args(#state { contents = C }) ->
+is_key_args(#state { collisions = Cols, contents = C }) ->
     frequency(
         [{10, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
-        [{1, ?SUCHTHAT([K], [map_key()], find(K, 1, C) == false)}]).
+        [{1, ?SUCHTHAT([K], [map_key(Cols)], find(K, 1, C) == false)}]).
 
 is_key_return(S, [K]) ->
     member(K, S).
@@ -566,8 +572,8 @@ is_key_features(_S, [_K], false) -> ["R002: is_key/2 on a non-existing key"].
 put(Key, Value) ->
     maps_runner:put(Key, Value).
     
-put_args(_S) ->
-    [map_key(), map_value()].
+put_args(#state { collisions = Cols }) ->
+    [map_key(Cols), map_value()].
 
 put_next(#state { contents = C } = State, _, [K, V]) ->
     State#state { contents = add_contents(K, V, C) }.
@@ -647,8 +653,14 @@ postcondition_common(S, Call, Res) ->
 %% Main property:
 prop_map() ->
     ?SETUP(fun() ->
+        {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
+        {Taken, _} = lists:split(20, Terms),
+        erlang:put(colliding_terms, lists:unzip([{X,Y} || [X, Y] <- Taken])),
         {ok, Pid} = maps_runner:start_link(),
-        fun() -> exit(Pid, kill) end
+        fun() ->
+                exit(Pid, kill),
+                erase(colliding_terms)
+        end
     end,
       ?FORALL(Cmds, more_commands(2, commands(?MODULE)),
         begin
@@ -661,7 +673,7 @@ prop_map() ->
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
         end)).
 
-prop_map_large() ->
+x_prop_map_large() ->
     ?SETUP(fun() ->
         {ok, Pid} = maps_runner:start_link(),
         fun() -> exit(Pid, kill) end
