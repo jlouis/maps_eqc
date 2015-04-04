@@ -29,9 +29,13 @@ state() ->
          {oneof([15000, 25000]), rand_seed(exs64)},
        initial_state(Sz, RS, undefined)).
 
-initial_state() ->
+gen_initial_state() ->
     Colliding = get(colliding_terms),
-    #state{ collisions = Colliding }.
+    ?LET(N, choose(0, min(length(Colliding), 64)),
+      begin
+          {Taken, _} = lists:split(N, Colliding),
+          #state { collisions = lists:unzip([{X,Y} || [X, Y] <- Taken]) }
+      end).
 
 %% GENERATORS
 
@@ -64,7 +68,11 @@ map_term(K) ->
     ]).
 
 %% Keys and values are map terms
-map_key() -> map_term().
+map_key() ->
+    map_term({[], []}).
+
+map_key({[], []}) ->
+    map_term();
 map_key({C1, C2}) ->
     oneof([map_term(), oneof([elements(C1), elements(C2)])]).
 
@@ -249,7 +257,7 @@ populate_features(_S, [Variant, _M], _) ->
 
 with(Ks) ->
     maps_runner:with(Ks).
-    
+
 with_args(#state { collisions = Cols, contents = Cs}) ->
     case Cs of
         [] -> [list(map_key(Cols))];
@@ -654,15 +662,15 @@ postcondition_common(S, Call, Res) ->
 prop_map() ->
     ?SETUP(fun() ->
         {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
-        {Taken, _} = lists:split(20, Terms),
-        erlang:put(colliding_terms, lists:unzip([{X,Y} || [X, Y] <- Taken])),
+        erlang:put(colliding_terms, Terms),
         {ok, Pid} = maps_runner:start_link(),
         fun() ->
                 exit(Pid, kill),
                 erase(colliding_terms)
         end
     end,
-      ?FORALL(Cmds, more_commands(2, commands(?MODULE)),
+      ?FORALL(State, gen_initial_state(),
+      ?FORALL(Cmds, more_commands(2, commands(?MODULE, State)),
         begin
           maps_runner:reset(),
           {H,S,R} = run_commands(?MODULE, Cmds),
@@ -671,7 +679,7 @@ prop_map() ->
           aggregate(with_title('Commands'), command_names(Cmds),
           aggregate(with_title('Features'), call_features(H),
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
-        end)).
+        end))).
 
 x_prop_map_large() ->
     ?SETUP(fun() ->
