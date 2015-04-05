@@ -23,11 +23,17 @@ I often just do the following:
 
 ## Status
 
-The current model crashes `OTP-17.4.1-1428-g7409949` with a segmentation fault. I have yet to figure out what is wrong, but something is wrong.
-
-Furthermore, we break OTP-17.4.1 as well on map equality.
+* 17.4.1: Found problems with comparison of exact terms. Fixed in 17.5 with OTP-12623
+* 18.0-rc1: Numerous bugs are detected by this suite. Some causes the system to segfault.
+* 18.0-rc1+patches: Maps are stable, except for maps where many keys collide. For those, we have found errors in maps:merge/2 which causes the system to excessively allocate memory until it runs out and crashes.
 
 ## Features
+
+We test a lot of cases which are highly unlikely to occur in the real world:
+
+* We store really odd map terms as keys
+* We run odd command orders on maps
+* We have maps in which almost every key causes a hash collision in the HAMT hash
 
 We currently test against the following features:
 
