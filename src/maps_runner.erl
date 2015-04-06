@@ -108,7 +108,7 @@ process(extract, M) -> {M, M};
 process({eq, MIn}, M) ->
     {MIn =:= M, M};
 process({reset, M}, _) -> {ok, M};
-process(reset, _) -> {ok, #{}};
+process(reset, _) -> {ok, maps:new()};
 process(size, M) -> {maps:size(M), M};
 process({put, K, V}, M) ->
     M2 = maps:put(K, V, M),
