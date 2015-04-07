@@ -3,6 +3,8 @@
 
 %% Standard boilerplate stuff
 -export([
+	ensure_started/1,
+	start/0,
 	start_link/0,
 	reset/0, reset/1
 ]).
@@ -43,8 +45,38 @@
 	persist :: [{reference(), map()}] %% The persistence list
 }).
 
+ensure_started(local) ->
+    case global:whereis_name(?MODULE) of
+         undefined ->
+             start_link(),
+             reset(),
+             ok;
+         Pid when is_pid(Pid) ->
+             reset(),
+             ok
+    end;
+ensure_started(Node) ->
+    ReplyPid = self(),
+    Pid = spawn(Node,
+      fun() ->
+        start(),
+        timer:sleep(10),
+        ReplyPid ! {started, self()}
+      end),
+    receive
+        {started, Pid} -> ok
+    after 2000 ->
+        exit(ensure_started_runner)
+    end,
+    global:sync(),
+    reset(),
+    ok.
+
+start() ->
+    gen_server:start({global, ?MODULE}, ?MODULE, [], []).
+
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
 
 reset() -> call(reset).
 reset(M) -> call({reset, M}).
@@ -75,7 +107,7 @@ without_q(Ks) -> call({without_q, Ks}).
 without(Ks) -> call({without, Ks}).
 
 call(X) ->
-    gen_server:call(?MODULE, X).
+    gen_server:call({global, ?MODULE}, X).
 
 init([]) ->
     {ok, #state { m = #{}, persist = [] } }.

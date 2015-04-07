@@ -680,21 +680,23 @@ weight(_S, _) -> 10.
 postcondition_common(S, Call, Res) ->
     eq(Res, return_value(S, Call)).
 
-%% Main property:
-prop_map() ->
+%% Main property, parameterized over where the map is run:
+map_property(Where) ->
     ?SETUP(fun() ->
         {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
         erlang:put(colliding_terms, Terms),
-        {ok, Pid} = maps_runner:start_link(),
         fun() ->
-                exit(Pid, kill),
+                case global:whereis_name(maps_runner) of
+                    undefined -> ok;
+                    Pid -> exit(Pid, kill)
+                end,
                 erase(colliding_terms)
         end
     end,
       ?FORALL(State, gen_initial_state(),
       ?FORALL(Cmds, more_commands(2, commands(?MODULE, State)),
         begin
-          maps_runner:reset(),
+          maps_runner:ensure_started(Where),
           {H,S,R} = run_commands(?MODULE, Cmds),
           collect(eqc_lib:stem_and_leaf('Final map size'), model_size(S),
           collect(eqc_lib:stem_and_leaf('Command Length'), length(Cmds),
@@ -702,6 +704,9 @@ prop_map() ->
           aggregate(with_title('Features'), call_features(H),
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
         end))).
+
+prop_map_local() -> map_property(local).
+%% prop_map_distributed() -> map_property('runner@127.0.0.1').
 
 x_prop_map_large() ->
     ?SETUP(fun() ->
