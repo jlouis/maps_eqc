@@ -706,7 +706,11 @@ map_property(Where) ->
         end))).
 
 prop_map_local() -> map_property(local).
-%% prop_map_distributed() -> map_property('runner@127.0.0.1').
+prop_map_distributed() ->
+    case net_adm:ping('runner@127.0.0.1') of
+        pang -> true;
+        pong -> map_property('runner@127.0.0.1')
+    end.
 
 x_prop_map_large() ->
     ?SETUP(fun() ->
