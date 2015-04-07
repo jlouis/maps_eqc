@@ -56,6 +56,10 @@ ensure_started(local) ->
              ok
     end;
 ensure_started(Node) ->
+    ensure_started(Node, 10).
+    
+ensure_started(_Node, 0) -> exit(gave_up_starting);
+ensure_started(Node, K) ->
     ReplyPid = self(),
     Pid = spawn(Node,
       fun() ->
@@ -65,8 +69,8 @@ ensure_started(Node) ->
       end),
     receive
         {started, Pid} -> ok
-    after 2000 ->
-        exit(ensure_started_runner)
+    after 500 ->
+        ensure_started(Node, K-1)
     end,
     global:sync(),
     reset(),

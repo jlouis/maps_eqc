@@ -714,7 +714,7 @@ prop_map_distributed() ->
     
 property_weight(local, prop_map_local) -> 1;
 property_weight(local, prop_map_distributed) -> 0;
-property_weight(distributed, prop_map_local) -> 1;
+property_weight(distributed, prop_map_local) -> 0;
 property_weight(distributed, prop_map_distributed) -> 3;
 property_weight(_, _) -> 1.
 
