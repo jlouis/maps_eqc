@@ -12,7 +12,7 @@
 -define(NUM_CORES, 8).
 
 save_state() ->
-    Terms = lists:reverse(lists:sort(generate())),
+    Terms = lists:sort(fun(L1, L2) -> length(L1) > length(L2) end, generate()),
     file:write_file("priv/colliding_terms.term", io_lib:format("~p.", [Terms])).
 
 generate() ->
