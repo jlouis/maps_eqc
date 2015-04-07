@@ -16,10 +16,21 @@ Needs rebar3 for the full compile.
 I often just do the following:
 
 	rebar3 shell
-	1> eqc:module({testing_budget, 15}, maps_eqc).
+	1> eqc:module([{testing_budget, 15}, {testing_profile, local}], maps_eqc).
 	…
 	2> c("src/maps_large_iso_eqc.erl").
-	3> eqc:module(maps_large_iso_eqc).
+	3> eqc:quickcheck(maps_large_iso_eqc).
+
+If you want to execute distributed tests, you must start two nodes
+
+	'eqc@127.0.0.1',
+	'runner@127.0.0.1'
+	
+Running the same code, and then you can request a budget with the distributed testing profile
+
+	1> eqc:module([{testing_budget, 60}, {testing_profile, distributed}], maps_eqc).
+	
+Note: this will run local tests with weight 1 and distributed tests with weight 3.
 
 ## Status
 
