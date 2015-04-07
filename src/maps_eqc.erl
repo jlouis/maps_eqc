@@ -56,8 +56,8 @@ evil_real() ->
 map_term(0) ->
     frequency([
        {100, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])},
-       {10, oneof([function0(int()), function2(int())])},
-       {10, eqc_gen:largebinary()}
+       {10, oneof([function0(int()), function2(int())])}
+       % {10, eqc_gen:largebinary()}
     ]);
 map_term(K) ->
     frequency([
