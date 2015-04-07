@@ -13,30 +13,54 @@ Needs rebar3 for the full compile.
 
 ## Running the test
 
-I often just do the following:
+The test case can be run in one of two modes: local and distributed.
 
-	rebar3 shell
+#### Running Locally:
+
+This is the simplest form. Compile the tests:
+
+	$ rebar3 compile
+	
+Then run an Erlang, for instance:
+
+	$ erl -name eqc@127.0.0.1 -pa _build/default/lib/*/ebin
+	## Replace with ${ERL_TOP}/bin/cerl -debug and so on
+
+Then, in the shell, run:
+
 	1> eqc:module([{testing_budget, 15}, {testing_profile, local}], maps_eqc).
-	…
-	2> c("src/maps_large_iso_eqc.erl").
-	3> eqc:quickcheck(maps_large_iso_eqc).
 
-If you want to execute distributed tests, you must start two nodes
+which will run tests for 15 seconds.
 
-	'eqc@127.0.0.1',
-	'runner@127.0.0.1'
+#### Running distributed:
+
+To make this test work, you need two nodes with the same *cookie*. The 'eqc' node will run the model, and the 'runner' node will run the maps. Hence, if a map test segfaults, the 'eqc' node knows this and can keep the model and output the commands from the failure.
+
+Set up the runner node in a heartbeat:
+
+	$ export HEART_COMMAND='erl -name runner@127.0.0.1 -pa _build/default/lib/*/ebin -heart -env HEART_BOOT_DELAY 0'
 	
-Running the same code, and then you can request a budget with the distributed testing profile
+Then run it in the `maps_eqc` directory:
 
-	1> eqc:module([{testing_budget, 60}, {testing_profile, distributed}], maps_eqc).
+	$ ${HEART_COMMAND}
 	
-Note: this will run local tests with weight 1 and distributed tests with weight 3.
+Now, start the 'eqc' node:
+
+	$ erl -name eqc@127.0.0.1 -pa _build/default/lib/*/ebin
+	## Replace with ${ERL_TOP}/bin/cerl -debug and so on
+	
+And run the tests with distribution enabled:
+
+	1> eqc:module([{testing_budget, 15}, {testing_profile, distributed}], maps_eqc).
+	
+Failures can segfault the 'runner' node but it will be heart–restarted and then shrinking will continue.
 
 ## Status
 
 * 17.4.1: Found problems with comparison of exact terms. Fixed in 17.5 with OTP-12623
 * 18.0-rc1: Numerous bugs are detected by this suite. Some causes the system to segfault.
 * 18.0-rc1+patches: Maps are stable, except for maps where many keys collide. For those, we have found errors in maps:merge/2 which causes the system to excessively allocate memory until it runs out and crashes.
+* 18.0-rc1+patches: Collision errors found in maps:from_list/1 with numerous colliding keys. Also found errors in `binary_to_term/1` and `term_to_binary/1`.
 
 ## Features
 
