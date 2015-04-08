@@ -265,6 +265,58 @@ populate_features(_S, [Variant, _M], _) ->
         puts -> ["R018: populating an empty map with put/2"]
     end.
 
+%% ILLEGAL
+%% --------------------------------------------------------------
+%% Meta-command which tests illegal invocations of the 'maps' module. That is,
+%% tests what happens when you call a map with something which is not a map
+
+%% Helper to generate something which is not a map:
+not_a_map() ->
+    ?SUCHTHAT(X, map_term(), not is_map(X)).
+
+not_a_list() ->
+    ?SUCHTHAT(X, map_term(), not is_list(X)).
+    
+not_a_function_2() ->
+    ?SUCHTHAT(X, map_term(), not is_function(X, 2)).
+
+irrelevant() ->
+    oneof([eqc_gen:map(int(), int()), not_a_map()]).
+
+illegal({Command, NotAMap}) ->
+    maps_runner:illegal(Command, NotAMap).
+    
+illegal_args(_S) ->
+    [oneof([
+      {size, not_a_map()},
+      {{put, map_term(), map_term()}, not_a_map()},
+      {{is_key, map_term()}, not_a_map()},
+      {keys, not_a_map()},
+      {{remove, map_term()}, not_a_map()},
+      {to_list, not_a_map()},
+      {{update_no_fail, map_term(), map_term()}, not_a_map()},
+      {values, not_a_map()},
+      {{populate, from_list, not_a_list()}, not_a_map()},
+      {{get_no_fail, map_term()}, not_a_map()},
+      {{find, map_term()}, not_a_map()},
+      {{merge, {oneof([left, right]), not_a_map()}}, irrelevant()},
+      {{merge, {oneof([left, right]), irrelevant()}}, not_a_map()},
+      {{fold, function2(int()), map_term()}, not_a_map()},
+      {{fold, not_a_function_2(), map_term()}, irrelevant()},
+      {{with, not_a_list()}, irrelevant()},
+      {{with, list(map_term())}, not_a_map()},
+      {{without, not_a_list()}, irrelevant()},
+      {{without, list(map_term())}, not_a_map()} %% Requires test with not a list
+    ])].
+
+illegal_return(_S, [{{fold, F, _}, _}]) when not is_function(F, 2) -> {error, function_clause};
+illegal_return(_S, [{{fold, _, _}, _}]) -> {error, function_clause};
+illegal_return(_S, [{size, _}]) -> {error, function_clause};
+illegal_return(_S, [{{without, _}, _}]) -> {error, function_clause};
+illegal_return(_S, [{{with, _}, _}]) -> {error, function_clause};
+illegal_return(_S, [_]) -> {error, badarg}.
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% COMMAND SECTION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -652,44 +704,6 @@ size_features(_S, [], Sz) ->
      true -> ["R009: size/1 on a small non-empty map"]
    end.
 
-%% ILLEGAL
-%% --------------------------------------------------------------
-%% Construct an illegal command by pushing in something which isn't a map
-
-%% Helper to generate something which is not a map:
-not_a_map() ->
-    ?SUCHTHAT(X, map_term(), not is_map(X)).
-
-not_a_list() ->
-    ?SUCHTHAT(X, map_term(), not is_list(X)).
-    
-illegal({Command, NotAMap}) ->
-    maps_runner:illegal(Command, NotAMap).
-    
-illegal_args(S) ->
-    [oneof([
-      {size, not_a_map()},
-      {{put, map_term(), map_term()}, not_a_map()},
-      {{is_key, map_term()}, not_a_map()},
-      {keys, not_a_map()},
-      {{remove, map_term()}, not_a_map()},
-      {to_list, not_a_map()},
-      {{update_no_fail, map_term(), map_term()}, not_a_map()},
-      {values, not_a_map()},
-      {{populate, from_list, not_a_list()}, not_a_map()},
-      {{get_no_fail, map_term()}, not_a_map()},
-      {{find, map_term()}, not_a_map()},
-      %% merge needs two-way tests
-      %% fold needs to test for F correctness
-      {{with, list(map_term())}, not_a_map()}, %% Requires test with not a list
-      {{without, list(map_term())}, not_a_map()} %% Requires test with not a list
-    ])].
-
-illegal_return(_S, [{size, _}]) -> {error, function_clause};
-illegal_return(_S, [{{without, _}, _}]) -> {error, function_clause};
-illegal_return(_S, [{{with, _}, _}]) -> {error, function_clause};
-illegal_return(_S, [_]) -> {error, badarg}.
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% PROPERTY AND TUNING SECTION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -726,7 +740,7 @@ weight(_S, update) -> 20;
 weight(_S, merge) -> 15;
 %% Default weight is 10 so we can make commands *less* likely than the default
 %% Negative tests just have to be there once in a while:
-weight(_S, illegal) -> 7;
+weight(_S, illegal) -> 5;
 weight(_S, _) -> 10.
 
 %% PROPERTY
