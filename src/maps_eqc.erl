@@ -668,7 +668,7 @@ weight(_S, remove) -> 7;
 %% Commands that manipulate the map are slightly more interesting:
 weight(_S, put) -> 20;
 weight(_S, update) -> 20;
-weight(_S, merge) -> 20;
+weight(_S, merge) -> 15;
 %% Default weight is 10 so we can make commands *less* likely than the default
 weight(_S, _) -> 10.
 
@@ -717,23 +717,6 @@ property_weight(local, prop_map_distributed) -> 0;
 property_weight(distributed, prop_map_local) -> 0;
 property_weight(distributed, prop_map_distributed) -> 3;
 property_weight(_, _) -> 1.
-
-x_prop_map_large() ->
-    ?SETUP(fun() ->
-        {ok, Pid} = maps_runner:start_link(),
-        fun() -> exit(Pid, kill) end
-    end,
-      ?FORALL(InitState, state(),
-      ?FORALL(Cmds, more_commands(2, commands(?MODULE, InitState)),
-        begin
-          maps_runner:reset(maps:from_list(InitState#state.contents)),
-          {H,S,R} = run_commands(?MODULE, Cmds),
-          collect(eqc_lib:stem_and_leaf('Final map size'), model_size(S),
-          collect(eqc_lib:stem_and_leaf('Command Length'), length(Cmds),
-          aggregate(with_title('Commands'), command_names(Cmds),
-          aggregate(with_title('Features'), call_features(H),
-              pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
-        end))).
 
 model_size(#state { contents = Cs }) -> length(Cs).
 
