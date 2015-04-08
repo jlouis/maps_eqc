@@ -103,7 +103,7 @@ m_get(K) -> call({get, K}).
 m_get(K, Def) -> call({get, K, Def}).
 find(K) -> call({find, K}).
 populate(Variant, Elems) -> call({populate, Variant, Elems}).
-merge(M) -> call({merge, M}).
+merge(Isns) -> call({merge, Isns}).
 fold(F, Init) -> call({fold, F, Init}).
 with_q(Ks) -> call({with_q, Ks}).
 with(Ks) -> call({with, Ks}).
@@ -182,8 +182,12 @@ process({get, K, Def}, M) ->
 process({find, K}, M) ->
     Res = maps:find(K, M),
     {Res, M};
-process({merge, M2}, M) ->
-    Res = maps:merge(M, M2),
+process({merge, Isns}, M) ->
+    Res = case Isns of
+    		identity -> maps:merge(M, M);
+    		{left, M2} -> maps:merge(M2, M);
+    		{right, M2} -> maps:merge(M, M2)
+    end,
     {Res, Res};
 process({fold, F, Init}, M) -> {maps:fold(F, Init, M), M};
 process({with_q, Ks}, M) ->

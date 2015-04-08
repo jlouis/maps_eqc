@@ -402,19 +402,36 @@ map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
 %% MERGE/2
 %% --------------------------------------------------------------
 
-merge(M) ->
-    maps_runner:merge(M).
+merge(Instructions) ->
+    maps_runner:merge(Instructions).
     
 merge_args(State) ->
-    ?LET(Elems, list({map_key(State), map_value()}),
-        [maps:from_list(Elems)]).
+    oneof([
+         [{left, ?LET(Elems, list({map_key(State), map_value()}), maps:from_list(Elems))}],
+         [{right, ?LET(Elems, list({map_key(State), map_value()}), maps:from_list(Elems))}],
+         [{left, ?LET(Elems, list(list({map_key(State), map_value()})),
+         	maps:from_list(lists:append(Elems)))}],
+         [{right, ?LET(Elems, list(list({map_key(State), map_value()})),
+         	maps:from_list(lists:append(Elems)))}],
+
+         [identity]
+    ]).
         
-merge_next(#state { contents = C } = State, _, [M]) ->
+merge_next(S, _, [identity]) -> S;
+merge_next(#state { contents = C } = State, _, [{right, M}]) ->
     NC = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
+    State#state { contents = NC };
+merge_next(#state { contents = C } = State, _, [{left, M}]) ->
+    NC = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, 1, Cs, {K, V}) end, C, M),
     State#state { contents = NC }.
 
-merge_return(#state { contents = C }, [M]) ->
+merge_return(#state { contents = C }, [identity]) ->
+    maps:from_list(C);
+merge_return(#state { contents = C }, [{right, M}]) ->
     Res = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
+    maps:from_list(Res);
+merge_return(#state { contents = C }, [{left, M}]) ->
+    Res = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, 1, Cs, {K, V}) end, C, M),
     maps:from_list(Res).
 
 merge_features(_S, _, _) ->
@@ -757,6 +774,13 @@ store(T, Pos, [Tup|Next], New) ->
         true -> [New | Next];
         false -> [Tup | store(T, Pos, Next, New)]
     end.
+
+store_reject_dups(_T, _Pos, [], New) -> [New];
+store_reject_dups(T, Pos, [Tup|Next], New) ->
+   case element(Pos, Tup) =:= T of
+       true -> [Tup|Next];
+       false -> [Tup | store_reject_dups(T, Pos, Next, New)]
+   end.
 
 find(_T, _Pos, []) -> false;
 find(T, Pos, [Tup|Next]) ->
