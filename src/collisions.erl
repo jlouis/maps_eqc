@@ -7,7 +7,7 @@
 -define(k64, 65536).
 
 -define(RANGE, ?k64 * ?k64 * ?k64).
--define(ITERATIONS, ?k64 * 1000).
+-define(ITERATIONS, ?k64 * 2000).
 -define(TBL_SIZE, ?k64 * 4).
 -define(NUM_CORES, 8).
 
