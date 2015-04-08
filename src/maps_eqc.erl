@@ -280,6 +280,21 @@ not_a_list() ->
 not_a_function_2() ->
     ?SUCHTHAT(X, map_term(), not is_function(X, 2)).
 
+improper_list() ->
+    ?SUCHTHAT([_ | Y], [{map_term(), map_term()} | map_term()], not is_list(Y)).
+
+wrong_list() ->
+    oneof([
+      {x},
+      ?SUCHTHAT(L, list(map_term()),
+        lists:any(
+          fun
+        	(T) when is_tuple(T) -> tuple_size(T) /= 2;
+        	(_) -> true
+          end,
+          L))
+    ]).
+                   
 irrelevant() ->
     oneof([eqc_gen:map(int(), int()), not_a_map()]).
 
@@ -296,7 +311,7 @@ illegal_args(_S) ->
       {to_list, not_a_map()},
       {{update_no_fail, map_term(), map_term()}, not_a_map()},
       {values, not_a_map()},
-      {{populate, from_list, not_a_list()}, not_a_map()},
+      {{populate, from_list, oneof([not_a_list(), improper_list(), wrong_list()])}, not_a_map()},
       {{get_no_fail, map_term()}, not_a_map()},
       {{find, map_term()}, not_a_map()},
       {{merge, {oneof([left, right]), not_a_map()}}, irrelevant()},
