@@ -17,7 +17,8 @@
 	eq/1,
 	remember/1,
 	recall/1,
-	become/1
+	become/1,
+	illegal/2
 ]).
 
 %% The real commands we can execute
@@ -90,6 +91,7 @@ eq(M) -> call({eq, M}).
 remember(Ref) -> call({remember, Ref}).
 recall(Ref) -> call({recall, Ref}).
 become(Ref) -> call({become, Ref}).
+illegal(Cmd, Map) -> call({illegal, Cmd, Map}).
 
 size() -> call(size).
 put(K, V) -> call({put, K, V}).
@@ -127,6 +129,14 @@ handle_call({remember, Ref}, _From, #state { m = M, persist = Ps } = State) ->
 handle_call({recall, Ref}, _From, #state { persist = Ps } = State) ->
     {Ref, M} = lists:keyfind(Ref, 1, Ps),
     {reply, {ok, M}, State};
+handle_call({illegal, Cmd, Map}, _From, State) ->
+    try
+        process(Cmd, Map),
+        {reply, ok, State}
+    catch
+        Class:Reason ->
+           {reply, {Class, Reason}, State}
+    end;
 handle_call(C, _From, #state { m = M } = State) ->
     {R, M2} = process(C, M),
     {reply, R, State#state { m = M2 }}.
@@ -155,6 +165,9 @@ process({remove, K}, M) ->
     M2 = maps:remove(K, M),
     {M2, M2};
 process(to_list, M) -> {maps:to_list(M), M};
+process({update_no_fail, K, V}, M) ->
+    M2 = maps:update(K, V, M),
+    {M2, M2};
 process({update, K, V}, M) ->
     try
         M2 = maps:update(K, V, M),
@@ -169,6 +182,7 @@ process({populate, from_list, L}, _) ->
 process({populate, puts, L}, _) ->
    M = lists:foldl(fun({K, V}, M) -> maps:put(K, V, M) end, #{}, L),
    {M, M};
+process({get_no_fail, K}, M) -> {maps:get(K, M), M};
 process({get, K}, M) ->
     try
         V = maps:get(K, M),
