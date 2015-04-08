@@ -30,7 +30,7 @@ generate(Table, RandSeed) ->
     ok.
 
 populate(Table, RandSeed) ->
-    case ets:info(Table, size) > ?k64 of
+    case ets:info(Table, size) > ?TBL_SIZE of
         true -> {Table, RandSeed};
         false ->
             {I, NextSeed} = rand:uniform_s(?RANGE, RandSeed),
