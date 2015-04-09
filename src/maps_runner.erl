@@ -13,19 +13,22 @@
 
 %% Meta-commands
 -export([
-	extract/0,
-	eq/1,
-	remember/1,
-	recall/1,
 	become/1,
-	illegal/2
+	convert/0,
+	eq/1,
+	extract/0,
+	illegal/2,
+	recall/1,
+	remember/1
 ]).
 
 %% The real commands we can execute
 -export([
 	find/1,
+	fold/2,
 	is_key/1,
 	keys/0,
+	%% map/1, % Implemented directly in maps_eqc
 	merge/1,
 	m_get/1, m_get/2,
 	populate/2,
@@ -35,8 +38,6 @@
 	to_list/0,
 	update/2,
 	values/0,
-	%% map/1, % Implemented directly in maps_eqc
-	fold/2,
 	with/1, with_q/1,
 	without/1, without_q/1
 ]).
@@ -92,6 +93,7 @@ remember(Ref) -> call({remember, Ref}).
 recall(Ref) -> call({recall, Ref}).
 become(Ref) -> call({become, Ref}).
 illegal(Cmd, Map) -> call({illegal, Cmd, Map}).
+convert() -> call(convert).
 
 size() -> call(size).
 put(K, V) -> call({put, K, V}).
@@ -150,6 +152,9 @@ code_change(_Oldvsn, State, _Aux) ->
 terminate(_Reason, _State) ->
     ok.
 
+process(convert, M) ->
+    RoundTrip = binary_to_term( term_to_binary(M) ),
+    {RoundTrip, M};
 process(extract, M) -> {M, M};
 process({eq, MIn}, M) ->
     {MIn =:= M, M};

@@ -111,3 +111,19 @@ We currently test against the following features:
 	R037: Maps sent roundtrip through another process are reflexive
 	R038: Recalled a persisted version of the map successfully
 	R039: Refocus and "become" an old version of the map
+	R040: Converted map there and back again
+	R041: badarg check on maps:size/1
+	R042: badarg check on maps:put/3
+	R043: badarg check on maps:is_key/2
+	R044: badarg check on maps:keys/1
+	R045: badarg check on maps:remove/2
+	R046: badarg check on maps:to_list/1
+	R047: badarg check on maps:update/3
+	R048: badarg check on maps:values/1
+	R049: badarg check on maps:from_list/1
+	R050: badarg check on maps:get/2
+	R051: badarg check on maps:find/2
+	R052: badarg check on maps:merge/2
+	R053: badarg check on maps:fold/3
+	R054: badarg check on maps:with/2
+	R055: badarg check on maps:without/2

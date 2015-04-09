@@ -331,7 +331,40 @@ illegal_return(_S, [{{without, _}, _}]) -> {error, function_clause};
 illegal_return(_S, [{{with, _}, _}]) -> {error, function_clause};
 illegal_return(_S, [_]) -> {error, badarg}.
 
+illegal_features(_S, [{Cmd, _}], _) ->
+    case Cmd of
+         size -> ["R041: badarg check on maps:size/1"];
+         {put, _, _} -> ["R042: badarg check on maps:put/3"];
+         {is_key, _} -> ["R043: badarg check on maps:is_key/2"];
+         keys -> ["R044: badarg check on maps:keys/1"];
+         {remove, _} -> ["R045: badarg check on maps:remove/2"];
+         to_list -> ["R046: badarg check on maps:to_list/1"];
+         {update_no_fail, _, _} -> ["R047: badarg check on maps:update/3"];
+         values -> ["R048: badarg check on maps:values/1"];
+         {populate, from_list, _} -> ["R049: badarg check on maps:from_list/1"];
+         {get_no_fail, _} -> ["R050: badarg check on maps:get/2"];
+         {find, _} -> ["R051: badarg check on maps:find/2"];
+         {merge, _} -> ["R052: badarg check on maps:merge/2"];
+         {fold, _, _} -> ["R053: badarg check on maps:fold/3"];
+         {with, _} -> ["R054: badarg check on maps:with/2"];
+         {without, _} -> ["R055: badarg check on maps:without/2"]
+     end.
 
+%% CONVERT
+%% --------------------------------------------------------------
+%% Meta-command which tests conversion to/from binary data
+convert() ->
+    maps_runner:convert().
+    
+convert_args(_S) ->
+    [].
+    
+convert_return(#state { contents = Cs }, []) ->
+    maps:from_list(Cs).
+
+convert_features(_S, [], _) ->
+    ["R040: Converted map there and back again"].
+    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% COMMAND SECTION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -756,6 +789,8 @@ weight(_S, merge) -> 15;
 %% Default weight is 10 so we can make commands *less* likely than the default
 %% Negative tests just have to be there once in a while:
 weight(_S, illegal) -> 5;
+%% Conversion has to be checked sometimes, but not too often
+weight(_S, convert) -> 5;
 weight(_S, _) -> 10.
 
 %% PROPERTY
