@@ -70,7 +70,7 @@ map_term(K) ->
 %% Keys and values are map terms
 
 map_key() ->
-    map_term({[], []}).
+    map_key(#state { collisions = [] }).
 
 find_eligible_collisions(Keys, Cols) ->
     lists:flatten(eligible(Keys, Cols)).
@@ -109,8 +109,14 @@ gen_map(State) ->
   	
 %% Default way to generate a list which can subsequently be used to populate
 %% a map.
+map_list() ->
+    map_list(#state { collisions = [] }).
+
 map_list(State) ->
     gen_map(State).
+
+map_map() ->
+    map_map(#state { collisions = [] }).
 
 map_map(State) ->
     ?LET(ML, map_list(State), maps:from_list(ML)).
