@@ -10,31 +10,18 @@
 -record(state,
     { collisions = [],
       contents = [] :: list_map(), %% The current contents of the map() represented as a list
-      persist = [] :: list({reference(), list_map()}) %% Remembered older versions
+      persist = [] :: list({reference(), list_map()}), %% Remembered older versions
+      otp_release :: string() %% The current OTP version
     }).
 
 -define(LARGE_MAP_RANGE, 65536*65536).
 
-initial_state(K, RS, Funs) ->
-    Contents =
-      case Funs of
-         undefined -> large_map(RS, K, ?LARGE_MAP_RANGE);
-         {FK, FV} -> large_map(RS, K, ?LARGE_MAP_RANGE, FK, FV)
-      end,
-    M = maps:from_list(Contents),
-    #state { contents = maps:to_list(M) }.
-
-state() ->
-    ?LET({Sz, RS},
-         {oneof([15000, 25000]), rand_seed(exs64)},
-       initial_state(Sz, RS, undefined)).
-
-gen_initial_state() ->
+gen_initial_state(OTPRel) ->
     Colliding = get(colliding_terms),
     ?LET(N, choose(0, min(length(Colliding), 64)),
       begin
           {Taken, _} = lists:split(N, Colliding),
-          #state { collisions = Taken }
+          #state { collisions = Taken, otp_release = OTPRel }
       end).
 
 %% GENERATORS
@@ -330,12 +317,43 @@ illegal_args(_S) ->
       {{without, list(map_term())}, not_a_map()} %% Requires test with not a list
     ])].
 
-illegal_return(_S, [{{fold, F, _}, _}]) when not is_function(F, 2) -> {error, function_clause};
-illegal_return(_S, [{{fold, _, _}, _}]) -> {error, function_clause};
-illegal_return(_S, [{size, _}]) -> {error, function_clause};
-illegal_return(_S, [{{without, _}, _}]) -> {error, function_clause};
-illegal_return(_S, [{{with, _}, _}]) -> {error, function_clause};
-illegal_return(_S, [_]) -> {error, badarg}.
+illegal_return(#state { otp_release = "17" } = S, Args) ->
+    illegal_return_r17(S, Args);
+illegal_return(#state { otp_release = "18" } = S, Args) ->
+    illegal_return_r18(S, Args).
+
+illegal_return_r17(_S, [{{fold, F, _}, _}]) when not is_function(F, 2) -> {error, function_clause};
+illegal_return_r17(_S, [{{fold, _, _}, _}]) -> {error, function_clause};
+illegal_return_r17(_S, [{size, _}]) -> {error, function_clause};
+illegal_return_r17(_S, [{{without, _}, _}]) -> {error, function_clause};
+illegal_return_r17(_S, [{{with, _}, _}]) -> {error, function_clause};
+illegal_return_r17(_S, [_]) -> {error, badarg}.
+
+%% Note: For 18.x and onwards, we have badmap checks. The order of the pattern
+%% match here is important, as some checks take precedence over other checks.
+illegal_return_r18(_S, [{{fold, _, _}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{fold, F, _}, _}]) when not is_function(F, 2) -> {error, badarg};
+illegal_return_r18(_S, [{size, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{without, _}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{without, _}, _}]) -> {error, badarg};
+illegal_return_r18(_S, [{{with, _}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{with, _}, _}]) -> {error, badarg};
+illegal_return_r18(_S, [{{remove, _K}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{find, _K}, X}]) when not is_map(X) -> {error, {badmap, X}};
+%% Note: The order *really* matters in merge/2. The direction defines if we call
+%% merge(X, Y) or merge(Y, X).
+illegal_return_r18(_S, [{{merge, {left, Y}}, _X}]) when not is_map(Y) -> {error, {badmap, Y}};
+illegal_return_r18(_S, [{{merge, {left, _Y}}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{merge, {right, _Y}}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{merge, {right, Y}}, _X}]) when not is_map(Y) -> {error, {badmap, Y}};
+illegal_return_r18(_S, [{values, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{to_list, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{keys, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{put, _K, _V}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{is_key, _K}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{update_no_fail, _K, _V}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{get_no_fail, _K}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{populate, from_list, _L}, _X}]) -> {error, badarg}.
 
 illegal_features(_S, [{Cmd, _}], _) ->
     case Cmd of
@@ -598,13 +616,14 @@ m_get_args(#state { contents = C } = S) ->
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= []] ++
       [{1, ?SUCHTHAT([K], [map_key(S)], find(K,1,C) == false)}]).
 
-m_get_return(#state { contents = C }, [K]) ->
+m_get_return(#state { contents = C } = S, [K]) ->
     case find(K,1,C) of
-       false -> {error, bad_key};
+       false -> badkey(S, K);
        {K, V} -> V
     end.
 
 m_get_features(_S, _, {error, bad_key}) -> ["R022: get/2 on a non-existing key"];
+m_get_features(_S, _, {error, {badkey, _}}) -> ["R022: get/2 on a non-existing key"];
 m_get_features(_S, _, _) -> ["R023: get on a successful key"].
 
 %% VALUES
@@ -641,7 +660,7 @@ update_next(#state { contents = C } = State, _, [K, V]) ->
 update_return(#state { contents = C} = S, [K, V]) ->
     case member(K, S) of
         true -> maps:from_list(replace_contents(K, V, C));
-        false -> {error, badarg}
+        false -> badarg(S, K)
     end.
 
 update_features(S, [K, _], _) ->
@@ -809,6 +828,7 @@ postcondition_common(S, Call, Res) ->
 
 %% Main property, parameterized over where the map is run:
 map_property(Where) ->
+    OTPRel = erlang:system_info(otp_release),
     ?SETUP(fun() ->
         {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
         erlang:put(colliding_terms, Terms),
@@ -820,7 +840,7 @@ map_property(Where) ->
                 erase(colliding_terms)
         end
     end,
-      ?FORALL(State, gen_initial_state(),
+      ?FORALL(State, gen_initial_state(OTPRel),
       ?FORALL(Cmds, more_commands(2, commands(?MODULE, State)),
         begin
           maps_runner:ensure_started(Where),
@@ -853,6 +873,8 @@ model_size(#state { contents = Cs }) -> length(Cs).
 %% 
 %% Various helper routines used by the model in more than one place.
 %%
+
+
 %% These implements list-operations on which =:= is used over == to make sure
 %% that 0 and 0.0 compares as different elements. This lets us use lists as an
 %% isomorphic representation of maps in the model.
@@ -920,4 +942,12 @@ delete(T, Pos, [Tup|Next]) ->
         false -> [Tup | delete(T, Pos, Next)]
     end.
 
+%% bad_key/2 computes the expected return of a bad key
+badkey(#state { otp_release = "17" }, _Key) -> {error, bad_key};
+badkey(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}}.
+
+badarg(#state { otp_release = "17" }, _Key) -> {error, badarg};
+badarg(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}}.
+
+%% A sort which does things right w.r.t arithmetic/total order.
 sort(L) -> eqc_lib:sort(L).
