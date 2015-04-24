@@ -845,8 +845,8 @@ map_property(Where) ->
         begin
           maps_runner:ensure_started(Where),
           {H,S,R} = run_commands(?MODULE, Cmds),
-          collect(eqc_lib:stem_and_leaf('Final map size'), model_size(S),
-          collect(eqc_lib:stem_and_leaf('Command Length'), length(Cmds),
+          collect(eqc_lib:summary('Final map size'), model_size(S),
+          collect(eqc_lib:summary('Command Length'), length(Cmds),
           aggregate(with_title('Commands'), command_names(Cmds),
           aggregate(with_title('Features'), call_features(H),
               pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))

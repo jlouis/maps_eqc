@@ -2,7 +2,7 @@
 %%% Kept as one big module for ease of development.
 %%% @end
 -module(eqc_lib).
--vsn("1.1.2").
+-vsn("1.2.0").
 -include_lib("eqc/include/eqc.hrl").
 
 -compile(export_all).
@@ -165,3 +165,40 @@ rle([], E, Cnt) ->
 
 rle_out(E, Cnt) ->
     [integer_to_list(E), <<"·("/utf8>>, integer_to_list(Cnt), ")"].
+
+%% SUMMARY PLOTS
+%% ------------------------------------------------------
+%%
+%% Summarize a data set like in R
+%%
+%% Requires access to the 'bear' application
+summary(Title) ->
+  fun(Values) ->
+    Stats = bear:get_statistics(summary_expand(Values)),
+    Out = [atom_to_list(Title), $\n,
+        "Min.   :", summary_stats(min, Stats), $\n,
+        "Median.:", summary_stats(median, Stats), $\n,
+        "Mean.  :", summary_stats(arithmetic_mean, Stats), $\n,
+        "75th P.:", summary_percentile(75, Stats), $\n,
+        "95th P.:", summary_percentile(95, Stats), $\n,
+        "99th P.:", summary_percentile(99, Stats), $\n,
+        "Max.   :", summary_stats(max, Stats), $\n
+    ],
+    io:format("~s", [Out])
+  end.
+
+summary_stats(Name, Stats) ->
+    case proplists:get_value(Name, Stats) of
+        I when is_integer(I) -> integer_to_list(I);
+        F when is_float(F) -> float_to_list(F, [{decimals, 6}, compact])
+    end.
+
+summary_percentile(N, Stats) ->
+    Percentiles = proplists:get_value(percentile, Stats),
+    case proplists:get_value(N, Percentiles) of
+        I when is_integer(I) -> integer_to_list(I);
+        F when is_float(F) -> float_to_list(F, [{decimals, 6}, compact])
+    end.
+
+summary_expand(Values) ->
+    lists:flatten([lists:duplicate(N, Elem) || {Elem, N} <- Values]).

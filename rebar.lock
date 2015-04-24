@@ -1,4 +1,8 @@
 [{<<"emprng">>,
   {git,"https://github.com/jj1bdx/emprng.git",
        {ref,"d0284af6fb5349531cc7a3968093b9d086a6a4b9"}},
+  0},
+ {<<"bear">>,
+  {git,"https://github.com/boundary/bear.git",
+       {ref,"0717c73bdedd27055211f9234a6efc5588a1299c"}},
   0}].
