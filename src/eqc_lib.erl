@@ -2,7 +2,7 @@
 %%% Kept as one big module for ease of development.
 %%% @end
 -module(eqc_lib).
--vsn("1.2.0").
+-vsn("1.2.1").
 -include_lib("eqc/include/eqc.hrl").
 
 -compile(export_all).
@@ -171,34 +171,65 @@ rle_out(E, Cnt) ->
 %%
 %% Summarize a data set like in R
 %%
-%% Requires access to the 'bear' application
 summary(Title) ->
   fun(Values) ->
-    Stats = bear:get_statistics(summary_expand(Values)),
+    Stats = summary_stats(Values),
     Out = [atom_to_list(Title), $\n,
         "Min.   :", summary_stats(min, Stats), $\n,
-        "Median.:", summary_stats(median, Stats), $\n,
-        "Mean.  :", summary_stats(arithmetic_mean, Stats), $\n,
-        "75th P.:", summary_percentile(75, Stats), $\n,
-        "95th P.:", summary_percentile(95, Stats), $\n,
-        "99th P.:", summary_percentile(99, Stats), $\n,
+        "1st Qr.:", summary_percentile(25, Stats), $\n,
+        "Median.:", summary_percentile(50, Stats), $\n,
+        "Mean.  :", summary_stats(mean, Stats), $\n,
+        "3rd Qr.:", summary_percentile(75, Stats), $\n,
         "Max.   :", summary_stats(max, Stats), $\n
     ],
     io:format("~s", [Out])
   end.
 
 summary_stats(Name, Stats) ->
-    case proplists:get_value(Name, Stats) of
+    case maps:get(Name, Stats) of
         I when is_integer(I) -> integer_to_list(I);
         F when is_float(F) -> float_to_list(F, [{decimals, 6}, compact])
     end.
 
 summary_percentile(N, Stats) ->
-    Percentiles = proplists:get_value(percentile, Stats),
-    case proplists:get_value(N, Percentiles) of
+    case maps:get({percentile, N}, Stats) of
         I when is_integer(I) -> integer_to_list(I);
         F when is_float(F) -> float_to_list(F, [{decimals, 6}, compact])
     end.
 
 summary_expand(Values) ->
     lists:flatten([lists:duplicate(N, Elem) || {Elem, N} <- Values]).
+
+summary_stats(RLEs) ->
+    summary_stats_(lists:sort(RLEs)).
+
+summary_stats_([]) ->
+    #{ min => na, max => na, {percentile, 25} => na, {percentile, 50} => na,
+      {percentile, 75} => na, mean => na, n => 0 };
+summary_stats_([{E, EC} | RLEs] = Values) ->
+    {Min, Max, Mean, N} = summary_scan(E, E, EC, E*EC, RLEs),
+    #{ min => Min, max => Max, n => N, mean => Mean,
+      {percentile, 25} => percentile(Values, N, 25),
+      {percentile, 50} => percentile(Values, N, 50),
+      {percentile, 75} => percentile(Values, N, 75)
+    }.
+
+summary_scan(Min, Max, N, Sum, []) -> {Min, Max, Sum/N, N};
+summary_scan(Min, Max, N, Sum, [{E, Count} | RLEs]) ->
+   summary_scan(
+      min(E, Min),
+      max(E, Max),
+      N + Count,
+      Sum + E*Count,
+      RLEs).
+
+percentile(RLE, N, Pct) ->
+    percentile_pick(RLE, perc(Pct, N)).
+    
+percentile_pick([{E, N} | _RLEs], ToSkip) when ToSkip =< N -> E;
+percentile_pick([{_E, N} | RLEs], ToSkip) ->
+    percentile_pick(RLEs, ToSkip - N).
+    
+perc(P, Len) ->
+    V = round(P * Len / 100),
+    erlang:max(1, V).
