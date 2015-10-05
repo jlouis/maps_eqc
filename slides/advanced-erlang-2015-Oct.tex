@@ -1,0 +1,393 @@
+\documentclass[lualatex]{beamer}
+
+\usepackage{fontspec}
+\usefonttheme{professionalfonts}%  don't change fonts inside beamer
+\setmainfont{Lucida Grande}
+\setsansfont{Lucida Grande}
+\usepackage{unicode-math}
+\setmathfont{Asana Math}
+
+\author{Jesper Louis Andersen\\jesper.louis.andersen@gmail.com\\Shopgun Aps}
+\date{\today{}}
+\title{Testing Erlang/OTP Release 18 maps\\Experience report}
+
+\begin{document}
+
+\maketitle
+
+\begin{frame}
+\frametitle{Erlang Maps}
+\begin{itemize}
+\item New feature in release 17
+\item Supports the usual \texttt{put, get} operations
+\item Syntax support in the compiler, opcode support in the emulator
+\item Driven by a new set of BIFs, \texttt{maps}-module
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{R17 Representation}
+\begin{itemize}
+\item 2 arrays of erlang terms (at the C layer)
+\item Keys and Values, index ordered by key
+\item Keys are shared over all maps if using the $:=$ binding operator
+\item Operations are generally $O(n)$ with binary searching $O(\lg n)$
+\item \emph{Extremely} efficient on small maps
+\item \emph{Miserable} for large maps
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Evolution}
+\begin{itemize}
+\item Release 18 switches the underlying representation as the map grows
+\item Based on Phil Bagwell's ``Ideal Hash Trees'' paper from 2000
+\item Also known as HAMT (Hash Array Mapped Trie)
+\item Key characteristic: hybrid between a hash table and a tree
+\item Persistent, not ephemeral
+\item Memory efficient on modern architectures
+\item uses POPCNT CPU instruction (Hamming Weight)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Why}
+\begin{itemize}
+\item Big-Oh, only tells you so much
+\item Modern algorithms efficiency are memory bound (in practice)
+\item Typical DRAM hit: 120ns
+\item Binary tree: $lg_2(N)$ memory reads
+\item Hash table: 1-2 memory reads (hopscotch hashing)
+\item HAMT: $lg_{32}(N)$ memory reads
+\end{itemize}
+Less internal waste than a hash-table or tree.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Price}
+\begin{itemize}
+\item Far more complex code
+\end{itemize}
+
+The file \texttt{erl\_maps.c}:\\
+\begin{center}
+\begin{tabular}[c]{r|l}
+Release&Code Size\\
+\hline
+17.5.6.3 & $552$ \\
+18.0.3 & $2233$ \\
+\end{tabular}
+\end{center}
+Not the full story: maps code in other C files as well
+\end{frame}
+
+\begin{frame}
+\frametitle{But…, is it correct? Cost/Benefit}
+Justification for a non-Academic:
+\begin{itemize}
+\item A faster data structure has \emph{no} value if it is wrong.
+\item Has to survive the real world, not just a benchmark in a paper.
+\item Erlang/OTP is a language of robustness and stability, not execution efficiency
+\item Maps is a central component, harmful faults in maps will hit almost everyone.
+\end{itemize}
+
+In other words, this is a prime candidate for formal methods.
+\end{frame}
+
+\begin{frame}
+\frametitle{Strategy}
+\begin{itemize}
+\item Not testing the compiler, target the \texttt{maps} module
+\item Start with a stateless model
+\item Tighten the specification by moving to a stateful model
+\item See where this takes us
+\item Above all, have fun doing it!
+\end{itemize}
+
+Modeling is \emph{exploratory} in nature
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Generating terms}
+\begin{itemize}
+\item Maps keys/values can be arbitrary Erlang terms
+\item Build a generator which covers broadly (funs, …)
+\end{itemize}
+
+\begin{verbatim}
+evil_real() ->
+   frequency([
+     {20, real()},
+     {1, return(0.0)},
+     {1, return(0.0/-1)}]).
+\end{verbatim}
+
+IEEE 754 Real's have two bit-representations of zero where
+$$
+	0.0 = -0.0
+$$
+
+Bug in internal map compare and \texttt{phash2/1} as well, fixed in R18.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+\begin{itemize}
+\item Use \texttt{to\_list/1} and \texttt{from\_list/1} as inverses
+\item Use \texttt{term\_to\_binary/?} and \texttt{binary\_to\_term/?}
+\end{itemize}
+
+\begin{verbatim}
+opts() ->
+  ?LET({Compressed, MinorVersion},
+    {oneof([
+        [], [compressed], [{compressed, choose(0,9)}]]),
+     oneof([
+        [], [{minor_version, choose(0,1)}]])},
+       Compressed ++ MinorVersion).
+\end{verbatim}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+\begin{verbatim}
+prop_binary_iso_fg() ->
+    ?FORALL([Opts, M],
+      [opts(),
+       oneof([
+           eqc_gen:map(
+               maps_eqc:map_key(),
+               maps_eqc:map_value()),
+           maps_eqc:map_map()]) ],
+         begin
+           Binary = term_to_binary(M, Opts),
+           M2 = binary_to_term(Binary),
+           equals(M, M2)
+         end).
+\end{verbatim}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+\begin{verbatim}
+13> eqc:quickcheck(maps_iso_eqc:prop_binary_iso_fg()).
+....Failed! After 5 tests.
+#{-3878269413 => hill,
+  -1 => stone,
+  #Fun<eqc_gen.133.121384563> => sand,
+  <<3:2>> => 0.0} /= 
+#{-1 => stone,
+  -3878269413 => hill,
+  #Fun<eqc_gen.133.121384563> => sand,
+  <<3:2>> => 0.0}
+Shrinking xxxx.x.xxxxxxxx…(35 times)
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+\begin{verbatim}
+#{-1 => flower,2147483647 => flower} /=
+#{2147483647 => flower,-1 => flower}
+false
+\end{verbatim}
+
+\begin{itemize}
+\item Wrong order, $2147483647 = 2^{31}-1$
+\item Compare function in C layer was wrong
+\item Affects R17, have not even started on R18 yet!
+\item Fix: OTP-12623
+\item This is Textbook QuickCheck Chapter 1!
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+
+\begin{itemize}
+\item Basic strategy: represent the map as $(K * V) \; list$
+\item Use a simple data structure in the model with worse asymptotics
+\item 24 Commands, each command updates the list accordingly
+\item Test persistence by keeping snapshots of the map and list
+\item Recall old snapshots
+\item Run the map in a separate process
+\end{itemize}
+
+The choice of having a process run the map was completely arbitrary, but proved valuable (see upcoming slides).
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+
+\begin{verbatim}
+update(K, V) ->
+    case maps_runner:update(K, V) of
+        {error, Reason} -> {error, Reason};
+        M -> M
+    end.
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+\begin{verbatim}
+update_args(#state { contents = C } = State) ->
+    frequency(
+      [{5,
+        ?LET(Pair, elements(C),
+          [element(1, Pair), map_value()])} || C /= [] ]
+    ++
+      [{1,
+        ?SUCHTHAT([K, _V], [map_key(State), map_value()],
+          find(K, 1, C) == false)}]).
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+\begin{verbatim}
+update_next(#state { contents = C } = S, _, [K, V]) ->
+    S#state {
+      contents = replace_contents(K, V, C)
+    }.
+
+update_return(#state { contents = C} = S, [K, V]) ->
+    case member(K, S) of
+        true ->
+          maps:from_list(replace_contents(K, V, C));
+        false ->
+          badarg(S, K)
+    end.
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+\begin{verbatim}
+update_features(S, [K, _], _) ->
+   case member(K, S) of
+        true -> {'r015', update, existing_key};
+        false -> {'r016', update, non_existing_key}
+   end.
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+{\small
+\begin{verbatim}
+Features
+9.9% {{maps_eqc,merge,1},"R019: Merging two maps"}
+9.0% {{maps_eqc,put,2},"R004: put on a new key"}
+7.7% {{maps_eqc,update,2},"R015: update/3 on an existing key"}
+7.7% {{maps_eqc,remove,1},"R011: remove/2 of present key"}
+5.4% {{maps_eqc,to_list,0},"R013: to_list/1 called on map"}
+5.0% {{maps_eqc,values,0},"R014: values/1 called on map"}
+4.5% {{maps_eqc,keys,0},"R010: Calling keys/1 on the map"}
+4.1% {{maps_eqc,m_get,1},"R023: get on a successful key"}
+…
+\end{verbatim}
+}
+
+There are 55 features in total.
+\end{frame}
+
+\begin{frame}
+\frametitle{Large maps}
+
+\begin{itemize}
+\item Problem: We need maps of 25000 random elements for the keys to collide
+\item Observation: This is not feasible
+\item Solution: Pre-generate a set of siblings!
+\end{itemize}
+
+Prefer siblings when inserting new nodes. Forces collisions on small maps!
+
+\end{frame}
+
+\begin{frame}
+\frametitle{When Erlang crashes}
+
+\begin{itemize}
+\item Problem: Running test cases crashes Erlang
+\item Observation: Maps runs in a separate process
+\item Solution: Distribute!
+\end{itemize}
+
+Run the map in one Erlang node, under \texttt{heart(1)}, the EQC model in another node.
+
+\begin{itemize}
+\item Crash! Wait for heart restart
+\item Continue shrinking
+\item Model is safe in its own node
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Problems found}
+
+\begin{verbatim}
+Thread 1 (Thread 0x7fd638fbf700 (LWP 7208)):
+#0  0x00007fd67aae54b7 in raise () from libc.so.6
+#1  0x00007fd67aae688a in abort () from libc.so.6
+#2  0x0000000000628232 in erl_assert_error
+    (expr=0x73171b "n > 1", 
+     func=0x731fb0 <…> "hashmap_from_chunked_array", 
+     file=0x731600 "beam/erl_map.c", line=682)
+       at sys/unix/sys.c:2908
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Problems found}
+
+\begin{verbatim}
+'eqc@127.0.0.1' got a corrupted external term from
+  'runner@127.0.0.1' on distribution channel 15879
+\end{verbatim}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Problems Solved}
+
+\begin{itemize}
+\item Common bug: wrong sign extension in callback from \texttt{qsort(3)} in C
+\item Many bugs were fixed inside Ericssons OTP team using the model
+\item Rough bug count: 10-15
+\item Typical fixes: 6492bf359, e3f21d4911
+\end{itemize}
+
+Twitter: ``The QuickCheck model by @jlouis666 has been very helpful finding subtle bugs in our Maps code. You have my deepest thanks for your work!''
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Insights}
+
+\begin{itemize}
+\item Implementation is mostly mechanic
+\item Sequential \texttt{eqc\_statem} is enough!
+\item Exploratory process was a success
+\item Covers 85\% of the C layer
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Open Source}
+
+See \url{https://github.com/jlouis/maps_eqc}
+
+\end{frame}
+
+\end{document}
