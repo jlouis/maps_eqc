@@ -1,0 +1,651 @@
+\documentclass[lualatex]{beamer}
+
+\usepackage{fontspec}
+\usepackage{fancyvrb}
+\usefonttheme{professionalfonts}%  don't change fonts inside beamer
+\setmainfont{Lucida Grande}
+\setsansfont{Lucida Grande}
+\usepackage{unicode-math}
+\setmathfont{Asana Math}
+
+\author{Jesper Louis Andersen\\jesper.louis.andersen@gmail.com\\Shopgun Aps}
+\date{\today{}}
+\title{Real World QuickCheck\\DTU}
+
+\begin{document}
+
+\maketitle
+
+\begin{frame}
+\frametitle{Who is Jesper?}
+\begin{itemize}
+\item Functional programming, type theory, semantics
+\item 10 years of Erlang experience
+\item 5+ years with QuickCheck
+\item Works for a small startup, ShopGun Aps.,
+\item BA in CS from Copenhagen University
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Erlang — in one slide}
+Erlang is an (untyped) functional language, with three main focal points:
+\begin{itemize}
+\item Communication—Concurrency, Protocol handling
+\item Robustness—Self-healing, Hardware failure tolerance, soft-realtime
+\item Continuous operation—Hot code loading, late binding, dynamic reconfiguration
+\end{itemize}
+
+Built originally for telecommunications, in 1986.
+
+Most of the Erlang in this talk is by osmosis.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{QuickCheck — summary}
+We would like to prove a property, such as
+\begin{equation}
+\begin{split}
+	\forall arr \in \text{array}(byte) :\\
+	\quad \quad unzip(zip(arr)) = arr
+\end{split}
+\end{equation}
+\begin{itemize}
+\item Proof—requires lemmas and theorems about \emph{zip/unzip}, exploiting their structure
+\item Check all arrays up to size $n$ is extremely time-consuming, even on large clusters
+\item Quickcheck—Generate samples of $arr$ via highly skewed distributions
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{QuickCheck - summary}
+Erlang QuickCheck notation for the example would be:
+\begin{verbatim}
+prop_zip_inverse() ->
+    ?FORALL(Arr, list(choose(0, 255)),
+        begin
+            Bin = list_to_binary(Arr),
+            Z = zlib:uncompress(zlib:compress(Bin)),
+            measure(array_length, length(Arr),
+                equals(Bin, Z))
+        end).
+\end{verbatim}
+Example output:
+\begin{verbatim}
+prop_zip_inverse: … OK, passed 100 tests
+array_length:
+    Count: 100   Min: 0   Max: 10   Avg: 2.850
+    StdDev: 2.350   Total: 285
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{QuickCheck - summary}
+``Program testing can be used to show the presence of bugs, but never to show their absence!'' — Dikjstra EWD249 1970
+
+\begin{itemize}
+\item Do \emph{not} generate a uniform distribution.
+\item Use heuristics and target where the needle/bug is most likely to be in the haystack
+\item Generate the nastiest examples which are unlikely to occur in normal operation
+\item Once a counterexample is found, employ a \emph{shrinking} strategy to search for a smaller one
+\item The power stems from statistical amplification and turning clock cycles into error-finding
+\end{itemize}
+
+Doing this well is (part of) the secret, which is the intellectual property of e.g., Quviq's commercial ``Erlang QuickCheck'' implementation.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Real world QuickCheck — Cost/Benefit analysis}
+Major software constraints:
+\begin{itemize}
+\item Productivity—Adding features and improving the software
+\item Correctness—The software informally does the ``right thing™''
+\end{itemize}
+Being incorrect to ``too correct'' hampers productivity, so often an equilibrium is used. QuickCheck shines for:
+\begin{itemize}
+\item Core components—where failure is less tolerated
+\item Error kernels—the parts of a system which \emph{absolutely has to be correct}
+\end{itemize}
+Erlang robustness secret: isolate the error kernel in the program from unstable parts, much like in an OS.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Real world QuickCheck — Typical projects}
+Erlang core components:
+\begin{itemize}
+\item Circuit breakers—protecting systems against cascading dependency failure
+\item Load regulation—protecting systems from overload
+\item Standard libraries—Erlang maps (this talk!)
+\item Compilers (Quviq)—by generating random programs
+\end{itemize}
+Distributed systems:
+\begin{itemize}
+\item Distributed Hash Tables—millions of potential nodes
+\item Database kernels (Basho)—Safe storage is paramount
+\end{itemize}
+Embedded hardware:
+\begin{itemize}
+\item AUTOSAR components (Quviq)—Simulate a car bus
+\item Walkie-Talkie base stations (Motorola DK)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Erlang Maps}
+\begin{itemize}
+\item New feature in release 17
+\item Heterogenous, in contrast to a statically typed OCaml
+\item Persistent (functional) data structure
+\item Supports the usual \texttt{put, get} operations
+\item Syntax support in the compiler, opcode support in the emulator
+\item Sugar for an underlying \texttt{maps}-module, with a C implementation for speed
+\end{itemize}
+Note: OCaml has no built-in support in the language, but has them in modules
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Erlang Maps—Syntax example}
+\begin{verbatim}
+2> M = #{ 42 => "foo" }.
+#{42 => "foo"}
+3> M2 = M#{ 'id' => fun(X) -> X + 1 end }.
+#{42 => "foo",id => #Fun<erl_eval.6.54118792>}
+5> M.
+#{42 => "foo"}
+11> case M2 of #{ 42 := V } -> V end.
+"foo"
+\end{verbatim}
+\end{frame}
+
+\begin{frame}
+\frametitle{R17 Representation}
+\begin{itemize}
+\item 2 arrays of erlang terms (at the C layer)
+\item Keys and Values, index ordered by key
+\item Keys are shared over maps if possible
+\item Operations are generally $O(n)$ with binary searching $O(\lg n)$
+\item \emph{Extremely} efficient on small maps
+\item \emph{Miserable} for large maps
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Evolution}
+\begin{itemize}
+\item Release 18 switches the underlying representation as the map grows
+\item Based on Phil Bagwell's ``Ideal Hash Trees'' paper from 2000
+\item Also known as HAMT (Hash Array Mapped Trie)
+\item Key characteristic: \emph{hybrid} between a hash table and a tree
+\item Persistent, not ephemeral
+\item Memory efficient on modern architectures
+\item uses POPCNT CPU instruction (Hamming Weight)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Why}
+\begin{itemize}
+\item Big-Oh, only tells you so much
+\item Modern efficiency is memory bound (in practice)
+\item Typical DRAM hit: 60–120ns
+\item Binary tree: $lg_2(N)$ memory reads
+\item Hash table: 1-2 memory reads (hopscotch hashing)
+\item HAMT: $lg_{32}(N)$ memory reads
+\end{itemize}
+Less internal waste than a hash-table or tree.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Price}
+\begin{itemize}
+\item Far more complex code
+\end{itemize}
+
+The file \texttt{erl\_maps.c}:\\
+\begin{center}
+\begin{tabular}[c]{r|l}
+Release&Code Size\\
+\hline
+17.5.6.3 & $552$ \\
+18.0.3 & $2233$ \\
+\end{tabular}
+\end{center}
+Not the full story: maps code in other C files as well
+\end{frame}
+
+\begin{frame}
+\frametitle{But…, is it correct? Cost/Benefit}
+Justification for a non-Academic:
+\begin{itemize}
+\item A faster data structure has \emph{no} value if it is wrong.
+\item Has to survive the real world, not just a benchmark in a paper.
+\item Erlang/OTP is a language of robustness and stability, not execution efficiency
+\item Maps is a central component, harmful faults in maps will hit almost everyone.
+\end{itemize}
+
+In other words, this is a prime candidate for formal methods.
+\end{frame}
+
+\begin{frame}
+\frametitle{Strategy}
+\begin{itemize}
+\item Not testing the compiler, target the \texttt{maps} module
+\item Start with a stateless model
+\item Tighten the specification by moving to a stateful model, explore
+\item We have no specification, so go in reverse, deriving one with QuickCheck!
+\item Above all, have fun doing it!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Generating terms}
+\begin{itemize}
+\item Maps keys/values can be arbitrary Erlang terms
+\item Build a generator which covers broadly (funs, …)
+\end{itemize}
+
+\begin{verbatim}
+evil_real() ->
+   frequency([
+     {20, real()},
+     {1, return(0.0)},
+     {1, return(0.0/-1)}]).
+\end{verbatim}
+
+IEEE 754 Real's have two bit-representations of zero where
+$$
+	0.0 = -0.0
+$$
+
+Bug in internal map compare and \texttt{phash2/1} as well, fixed in R18.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Generating terms}
+\begin{Verbatim}[fontsize=\small]
+map_term() ->
+    ?SIZED(Sz, map_term(Sz)).
+
+map_term(0) ->
+    frequency([
+       {100, oneof([int(), largeint(), evil_real(), …])},
+       {10, ?SHRINK(
+           oneof([function0(int()), function2(int())]),
+           [foo])}
+       {10, eqc_gen:largebinary()}
+    ]);
+map_term(K) ->
+    frequency([
+        {40, map_term(0)},
+        {1, ?LAZY(list(map_term(K div 8)))},
+        {1, ?LAZY(?LET(L, list(map_term(K div 8)),
+            list_to_tuple(L)))},
+        {1, ?LAZY(eqc_gen:map(map_term(K div 8),
+            map_term(K div 8)))}
+    ]).
+\end{Verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+Totality(1):
+\begin{equation}
+	\forall x \in X : \texttt{doesnt\_crash}[f(x)]
+\end{equation}
+
+Inverses:
+\begin{equation}
+	\forall x \in X : f^{-1}(f(x)) = x
+\end{equation}
+
+Idempotence:
+\begin{equation}
+	\forall x \in X : f(f(x)) = f(x)
+\end{equation}
+
+The QuickCheck bag-of-tricks requires you to be able to identify these in real programs
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+\begin{itemize}
+\item Use \texttt{to\_list/1} and \texttt{from\_list/1} as inverses
+\item Use \texttt{term\_to\_binary/?} and \texttt{binary\_to\_term/?} (serialization)
+\end{itemize}
+
+\begin{verbatim}
+opts() ->
+  ?LET({Compressed, MinorVersion},
+    {oneof([
+        [], [compressed], [{compressed, choose(0,9)}]]),
+     oneof([
+        [], [{minor_version, choose(0,1)}]])},
+       Compressed ++ MinorVersion).
+\end{verbatim}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+\begin{verbatim}
+prop_binary_iso_fg() ->
+    ?FORALL([Opts, M],
+      [opts(),
+       oneof([
+           eqc_gen:map(
+               maps_eqc:map_key(),
+               maps_eqc:map_value()),
+           maps_eqc:map_map()]) ],
+         begin
+           Binary = term_to_binary(M, Opts),
+           M2 = binary_to_term(Binary),
+           equals(M, M2)
+         end).
+\end{verbatim}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+\begin{verbatim}
+13> eqc:quickcheck(maps_iso_eqc:prop_binary_iso_fg()).
+....Failed! After 5 tests.
+#{-3878269413 => hill,
+  -1 => stone,
+  #Fun<eqc_gen.133.121384563> => sand,
+  <<3:2>> => 0.0} /= 
+#{-1 => stone,
+  -3878269413 => hill,
+  #Fun<eqc_gen.133.121384563> => sand,
+  <<3:2>> => 0.0}
+Shrinking xxxx.x.xxxxxxxx…(35 times)
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateless model}
+
+\begin{verbatim}
+#{-1 => flower,2147483647 => flower} /=
+#{2147483647 => flower,-1 => flower}
+false
+\end{verbatim}
+
+\begin{itemize}
+\item Wrong order, $2147483647 = 2^{31}-1$
+\item Compare function in C layer was wrong
+\item Affects R17, have not even started on R18 yet!
+\item Fix: OTP-12623
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful models—Why}
+
+\begin{itemize}
+\item The \texttt{maps} module has 24 functions, which interact
+\item We could generate a list of commands as a trace
+\item Then we could both \emph{interpret} the trace and \emph{replay} it against the system-under-test
+\item This would give us a random map, generated by the 24 commands, which we could observe for correctness.
+\end{itemize}
+
+\begin{itemize}
+\item Key idea of stateful models: base the current command and input to that command on the commands that came before it in the trace.
+\item I.e., let commands depend on each other.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful models—Why}
+
+Suppose we have
+\begin{Verbatim}
+	maps:remove(K, Map)
+\end{Verbatim}
+
+\begin{itemize}
+\item How often will \texttt{K} be in the map? Rarely.
+\item A stateful model tracks what is currently in the map
+\item So we can explicitly pick a \texttt{K} which is present
+\end{itemize}
+
+\begin{itemize}
+\item \texttt{maps:put(K, V, Map)} should try to overwrite existing keys
+\item If we know we are overwriting a key, we get better code coverage
+\item Can also handle side-effects
+\end{itemize}
+
+Stateful models allows for far tighter specifications, and better coverage, which improves their ability to find counterexamples quickly.
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+
+Stateful models are the norm in large developments, often composing several such models together
+
+\begin{itemize}
+\item Basic strategy: model the map as $(K * V) \; list$
+\item Use a simple data structure in the model with worse asymptotics (standard trick)
+\end{itemize}
+
+Alternative model: simplify and only \emph{count} the elements in the map.
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Primary property (slightly simplified)}
+\begin{Verbatim}[fontsize=\small]
+map_property() ->
+      ?FORALL(Cmds, commands(?MODULE),
+        begin
+          {H,S,R} = run_commands(?MODULE, Cmds),
+          
+          collect(eqc_lib:summary('Final map size'),
+          	model_size(S),
+          collect(eqc_lib:summary('Command Length'),
+          	length(Cmds),
+          aggregate(with_title('Commands'),
+          	command_names(Cmds),
+          aggregate(with_title('Features'),
+          	call_features(H),
+            pretty_commands(?MODULE, Cmds, {H,S,R}, R == ok)))))
+        end).
+\end{Verbatim}
+\end{frame}
+
+\begin{frame}
+What is going on
+\begin{itemize}
+\item Generate trace symbolically $Cmds := S_1 \to S_2 \to S_3 \to …$
+\item Run the trace against the system
+\item Note: command generation \emph{never} invokes the system-under-test
+\end{itemize}
+Each command is specified by its:
+\begin{itemize}
+\item Precondition—in what state and with what arguments can the command fire?
+\item Argument-generator—what arguments should be generated for the command?
+\item Next State—if the command is executed, how is the model state altered?
+\item Postcondition/Return—If replayed against the system-under-test, what is the expected return value?
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+
+\begin{verbatim}
+put(Key, Value) ->
+    maps_runner:put(Key, Value).
+    
+put_args(State) ->
+    [map_key(State), map_value()].
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+\begin{Verbatim}[fontsize=\small]
+put_next(#state { contents = C } = State, _, [K, V]) ->
+    State#state { contents = add_contents(K, V, C) }.
+
+put_return(#state { contents = C}, [K, V]) ->
+    maps:from_list(add_contents(K, V, C)).
+
+put_features(S, [K, _Value], _Res) ->
+    case member(K, S) of
+        true -> ["R003: put/3 on existing key"];
+        false -> ["R004: put on a new key"]
+    end.
+\end{Verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+\begin{Verbatim}[fontsize=\small]
+is_key_args(#state { contents = C } = State) ->
+    frequency(
+        [{10, ?LET(Pair, elements(C),
+        		[element(1, Pair)])} || C /= [] ] ++
+        [{1, ?SUCHTHAT([K], [map_key(State)],
+        		find(K, 1, C) == false)}]).
+
+is_key_features(_S, [_K], true) ->
+	["R001: is_key/2 on a present key"];
+is_key_features(_S, [_K], false) ->
+	["R002: is_key/2 on a non-existing key"].
+\end{Verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+\begin{Verbatim}[fontsize=\small]
+m_get_args(#state { contents = C } = S) ->
+    frequency(
+      [{5, ?LET(Pair, elements(C),
+      		[element(1, Pair)])} || C /= []] ++
+      [{1, ?SUCHTHAT([K], [map_key(S)],
+      		find(K,1,C) == false)}]).
+
+m_get_return(#state { contents = C } = S, [K]) ->
+    case find(K,1,C) of
+       false -> badkey(S, K);
+       {K, V} -> V
+    end.
+\end{Verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stateful model}
+{\small
+\begin{verbatim}
+Features
+9.9% {{maps_eqc,merge,1},"R019: Merging two maps"}
+9.0% {{maps_eqc,put,2},"R004: put on a new key"}
+7.7% {{maps_eqc,update,2},"R015: update/3 on an existing key"}
+7.7% {{maps_eqc,remove,1},"R011: remove/2 of present key"}
+5.4% {{maps_eqc,to_list,0},"R013: to_list/1 called on map"}
+5.0% {{maps_eqc,values,0},"R014: values/1 called on map"}
+4.5% {{maps_eqc,keys,0},"R010: Calling keys/1 on the map"}
+4.1% {{maps_eqc,m_get,1},"R023: get on a successful key"}
+…
+\end{verbatim}
+}
+
+There are 55 features in total.
+\end{frame}
+
+\begin{frame}
+\frametitle{Large maps}
+
+\begin{itemize}
+\item Problem: We need maps of 25000 random elements for the keys to collide
+\item Observation: This is not feasible
+\item Solution: Pre-generate a set of siblings!
+\end{itemize}
+
+Prefer siblings when inserting new nodes. Forces collisions on small maps!
+
+\end{frame}
+
+\begin{frame}
+\frametitle{When Erlang crashes}
+
+\begin{itemize}
+\item Problem: Running test cases crashes Erlang
+\item Observation: Maps runs in a separate process
+\item Solution: Distribute!
+\end{itemize}
+
+Run the map in one Erlang node, under \texttt{heart(1)}, the EQC model in another node.
+
+\begin{itemize}
+\item Crash! Wait for heart restart
+\item Continue shrinking
+\item Model is safe in its own node
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Problems found}
+
+\begin{verbatim}
+Thread 1 (Thread 0x7fd638fbf700 (LWP 7208)):
+#0  0x00007fd67aae54b7 in raise () from libc.so.6
+#1  0x00007fd67aae688a in abort () from libc.so.6
+#2  0x0000000000628232 in erl_assert_error
+    (expr=0x73171b "n > 1", 
+     func=0x731fb0 <…> "hashmap_from_chunked_array", 
+     file=0x731600 "beam/erl_map.c", line=682)
+       at sys/unix/sys.c:2908
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Problems found}
+
+\begin{verbatim}
+'eqc@127.0.0.1' got a corrupted external term from
+  'runner@127.0.0.1' on distribution channel 15879
+\end{verbatim}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Problems Solved}
+
+\begin{itemize}
+\item Common bug: wrong sign extension in callback from \texttt{qsort(3)} in C
+\item Many bugs were fixed inside Ericssons OTP team using the model
+\item Rough bug count: 10-15
+\item Typical fixes: 6492bf359, e3f21d4911
+\end{itemize}
+
+Twitter: ``The QuickCheck model by @jlouis666 has been very helpful finding subtle bugs in our Maps code. You have my deepest thanks for your work!''
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Insights}
+
+\begin{itemize}
+\item Implementation is mostly mechanic
+\item Sequential \texttt{eqc\_statem} is enough!
+\item Exploratory process was a success
+\item Covers 85\% of the C layer
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Open Source}
+
+See \url{https://github.com/jlouis/maps_eqc}
+
+\end{frame}
+
+\end{document}
