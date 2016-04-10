@@ -39,7 +39,8 @@
 	update/2,
 	values/0,
 	with/1, with_q/1,
-	without/1, without_q/1
+	without/1, without_q/1,
+	take/1
 ]).
 
 -record(state,{
@@ -113,6 +114,7 @@ with_q(Ks) -> call({with_q, Ks}).
 with(Ks) -> call({with, Ks}).
 without_q(Ks) -> call({without_q, Ks}).
 without(Ks) -> call({without, Ks}).
+take(K) -> call({take, K}).
 
 call(X) ->
     gen_server:call({global, ?MODULE}, X).
@@ -188,6 +190,13 @@ process({populate, puts, L}, _) ->
    M = lists:foldl(fun({K, V}, M) -> maps:put(K, V, M) end, #{}, L),
    {M, M};
 process({get_no_fail, K}, M) -> {maps:get(K, M), M};
+process({take, K}, M) ->
+    try
+        {V, M2} = maps:take(K, M),
+        {V, M2}
+    catch
+        Class:Err -> {{Class, Err}, M}
+    end;
 process({get, K}, M) ->
     try
         V = maps:get(K, M),

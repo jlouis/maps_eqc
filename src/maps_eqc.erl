@@ -397,6 +397,7 @@ convert_features(_S, [], _) ->
 %% you can call as a user of the module.
 %%
 
+
 %% WITH/2
 %% --------------------------------------------------------------
 
@@ -604,6 +605,30 @@ m_get_default_features(S, [K, _Default], _) ->
          true -> ["R024: get/3 on an existing key"];
          false -> ["R025: get/3 on a non-existing key"]
     end.
+
+%% TAKE/2
+%% --------------------------------------------------------------
+
+take(K) ->
+    maps_runner:take(K).
+    
+take_args(#state { contents = C } = S) ->
+   frequency(
+     [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C/= []] ++
+     [{1, ?SUCHTHAT([K], [map_key(S)], find(K,1,C) == false)}]).
+     
+take_return(#state { contents = C } = S, [K]) ->
+    case find(K,1,C) of
+       false -> badkey(S, K);
+       {K, V} -> V
+    end.
+
+take_next(#state { contents = Cs } = S, _, [K]) ->
+    S#state { contents = lists:keydelete(K, 1, Cs) }.
+
+take_features(_S, _, {error, bad_key}) -> ["R056: take/2 on a non-existing key"];
+take_features(_S, _, {error, {badkey, _}}) -> ["R056: take/2 on a non-existing key"];
+take_features(_S, _, _) -> ["R057: take/2 on an existing key"].
 
 %% GET/2
 %% --------------------------------------------------------------

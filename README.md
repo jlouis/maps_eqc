@@ -127,3 +127,6 @@ We currently test against the following features:
 	R053: badarg check on maps:fold/3
 	R054: badarg check on maps:with/2
 	R055: badarg check on maps:without/2
+	R056: badkey on a maps:take/2
+	R057: succesful maps:take/2
+
