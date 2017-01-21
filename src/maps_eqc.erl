@@ -317,6 +317,8 @@ illegal_args(_S) ->
       {{without, list(map_term())}, not_a_map()} %% Requires test with not a list
     ])].
 
+illegal_return(#state { otp_release = "19" } = S, Args) ->
+    illegal_return_r19(S, Args);
 illegal_return(#state { otp_release = "17" } = S, Args) ->
     illegal_return_r17(S, Args);
 illegal_return(#state { otp_release = "18" } = S, Args) ->
@@ -354,6 +356,8 @@ illegal_return_r18(_S, [{{is_key, _K}, X}]) when not is_map(X) -> {error, {badma
 illegal_return_r18(_S, [{{update_no_fail, _K, _V}, X}]) when not is_map(X) -> {error, {badmap, X}};
 illegal_return_r18(_S, [{{get_no_fail, _K}, X}]) when not is_map(X) -> {error, {badmap, X}};
 illegal_return_r18(_S, [{{populate, from_list, _L}, _X}]) -> {error, badarg}.
+
+illegal_return_r19(S, Args) -> illegal_return_r18(S, Args).
 
 illegal_features(_S, [{Cmd, _}], _) ->
     case Cmd of
@@ -617,8 +621,10 @@ take_args(#state { contents = C } = S) ->
      [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C/= []] ++
      [{1, ?SUCHTHAT([K], [map_key(S)], find(K,1,C) == false)}]).
      
-take_return(#state { contents = C } = S, [K]) ->
+take_return(#state { contents = C, otp_release = R } = S, [K]) ->
     case find(K,1,C) of
+       false when R == "19" ->
+           {error, {badmatch, error}};
        false -> badkey(S, K);
        {K, V} -> V
     end.
@@ -628,6 +634,7 @@ take_next(#state { contents = Cs } = S, _, [K]) ->
 
 take_features(_S, _, {error, bad_key}) -> ["R056: take/2 on a non-existing key"];
 take_features(_S, _, {error, {badkey, _}}) -> ["R056: take/2 on a non-existing key"];
+take_features(_S, _, {error, {badmatch, error}}) -> ["R056a: take/2 on a non-existing key (R19)"];
 take_features(_S, _, _) -> ["R057: take/2 on an existing key"].
 
 %% GET/2
@@ -969,10 +976,12 @@ delete(T, Pos, [Tup|Next]) ->
 
 %% bad_key/2 computes the expected return of a bad key
 badkey(#state { otp_release = "17" }, _Key) -> {error, bad_key};
-badkey(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}}.
+badkey(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}};
+badkey(#state { otp_release = "19" }, Key) -> {error, {badkey, Key}}.
 
 badarg(#state { otp_release = "17" }, _Key) -> {error, badarg};
-badarg(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}}.
+badarg(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}};
+badarg(#state { otp_release = "19" }, Key) -> {error, {badkey, Key}}.
 
 %% A sort which does things right w.r.t arithmetic/total order.
 sort(L) -> eqc_lib:sort(L).

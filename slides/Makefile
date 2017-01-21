@@ -1,2 +1,2 @@
 all:
-	lualatex dtu-2016-jan
+	lualatex dtu-2017-jan
