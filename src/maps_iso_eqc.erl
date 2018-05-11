@@ -5,7 +5,7 @@
 -module(maps_iso_eqc).
 
 -include_lib("eqc/include/eqc.hrl").
-
+-compile({parse_transform, eqc_parallelize}).
 -compile(export_all).
 
 %% Generate an options list for term_to_binary/2

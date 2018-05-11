@@ -630,7 +630,11 @@ take_return(#state { contents = C, otp_release = R } = S, [K]) ->
     end.
 
 take_next(#state { contents = Cs } = S, _, [K]) ->
-    S#state { contents = lists:keydelete(K, 1, Cs) }.
+    S#state { contents = delete_elem(K, Cs) }.
+
+delete_elem(_K, []) -> [];
+delete_elem(K, [{K, _}|Es]) -> Es;
+delete_elem(K, [E|Es]) -> [E | delete_elem(K, Es)].
 
 take_features(_S, _, {error, bad_key}) -> ["R056: take/2 on a non-existing key"];
 take_features(_S, _, {error, {badkey, _}}) -> ["R056: take/2 on a non-existing key"];

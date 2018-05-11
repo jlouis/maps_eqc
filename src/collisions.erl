@@ -18,25 +18,24 @@ save_state() ->
 generate() ->
     erts_debug:set_internal_state(available_internal_state, true),
     Table = ets:new(generator_table, [bag, {read_concurrency, true}, public]),
-    RandSeed = rand:seed_s(exs64, unique_value()),
-    generate(Table, RandSeed),
+    generate(Table),
     fanout(Table, ?NUM_CORES),
     Collisions = find_collisions(Table),
     ets:delete(Table),
     Collisions.
 
-generate(Table, RandSeed) ->
-    populate(Table, RandSeed),
+generate(Table) ->
+    populate(Table),
     ok.
 
-populate(Table, RandSeed) ->
+populate(Table) ->
     case ets:info(Table, size) > ?TBL_SIZE of
-        true -> {Table, RandSeed};
+        true -> Table;
         false ->
-            {I, NextSeed} = rand:uniform_s(?RANGE, RandSeed),
+            I = rand:uniform(?RANGE),
             Hash = internal_hash(I),
             ets:insert(Table, [{Hash, I}]),
-            populate(Table, NextSeed)
+            populate(Table)
     end.
 
 fanout(Table, Cores) ->
@@ -52,12 +51,11 @@ collect([{_Pid, Ref} | Monitored]) ->
    end.
 
 iterate_init(Table) ->
-    RandSeed = rand:seed_s(exs64, unique_value()),
-    iterate(Table, RandSeed, ?ITERATIONS).
+    iterate(Table, ?ITERATIONS).
 
-iterate(_Table, _Seed, 0) -> ok;
-iterate(Table, Seed, K) ->
-    {I, NextSeed} = rand:uniform_s(?RANGE, Seed),
+iterate(_Table, 0) -> ok;
+iterate(Table, K) ->
+    I = rand:uniform(?RANGE),
     Hash = internal_hash(I),
     case ets:member(Table, Hash) of
         true ->
@@ -66,8 +64,7 @@ iterate(Table, Seed, K) ->
         false ->
             ok
     end,
-    iterate(Table, NextSeed, K-1).
-
+    iterate(Table, K-1).
 
 find_collisions(Table) ->
     find_collisions(Table, ets:first(Table)).
@@ -82,5 +79,3 @@ find_collisions(Table, Key) ->
 internal_hash(Term) ->
     erts_debug:get_internal_state({internal_hash, Term}).
 
-unique_value() ->
-    {erlang:phash2([{node(),self()}]), erlang:monotonic_time(), erlang:unique_integer()}.

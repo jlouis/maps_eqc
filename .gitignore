@@ -8,3 +8,12 @@ ebin
 rel/example_project
 .concrete/DEV_MODE
 .rebar
+/current_counterexample.eqc
+*.aux
+*.log
+*.nav
+*.out
+*.pdf
+*.snm
+*.toc
+*.vrb

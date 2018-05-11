@@ -1,4 +1,1 @@
-[{<<"emprng">>,
-  {git,"https://github.com/jj1bdx/emprng.git",
-       {ref,"d553038206f70d954ed293ec5832096b5ec5f908"}},
-  0}].
+[].
