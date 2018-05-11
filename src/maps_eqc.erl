@@ -4,24 +4,24 @@
 -include_lib("eqc/include/eqc_statem.hrl").
 
 -compile(export_all).
+-compile(nowarn_export_all).
 
 -type list_map() :: list({term(), term()}).
 
 -record(state,
     { collisions = [],
       contents = [] :: list_map(), %% The current contents of the map() represented as a list
-      persist = [] :: list({reference(), list_map()}), %% Remembered older versions
-      otp_release :: string() %% The current OTP version
+      persist = [] :: list({reference(), list_map()}) %% Remembered older versions
     }).
 
 -define(LARGE_MAP_RANGE, 65536*65536).
 
-gen_initial_state(OTPRel) ->
+gen_initial_state() ->
     Colliding = get(colliding_terms),
     ?LET(N, choose(0, min(length(Colliding), 64)),
       begin
           {Taken, _} = lists:split(N, Colliding),
-          #state { collisions = Taken, otp_release = OTPRel }
+          #state { collisions = Taken }
       end).
 
 %% GENERATORS
@@ -107,31 +107,6 @@ map_map() ->
 
 map_map(State) ->
     ?LET(ML, map_list(State), maps:from_list(ML)).
-
-rand_seed() ->
-    %% Should really be integers, but we shouldn't care.
-    %% It never makes sense to shrink these down at all,
-    %% so request we never shrink these values.
-    noshrink({nat(), nat(), nat()}).
-    
-%% Generate a random seed value
-rand_seed(Alg) ->
-    ?LET(Seed, rand_seed(),
-        rand:seed_s(Alg, Seed)).
-        
-%% Generate a large map of size K with function as key/value generators
-large_map(RandState, K, N) ->
-    large_map(RandState, K, N, fun(X) -> X end, fun(X) -> X end, []).
-
-large_map(RandState, K, N, FK, FV) ->
-    large_map(RandState, K, N, FK, FV, []).
-
-large_map(_RandState, 0, _N, _FK, _FV, Acc) -> Acc;
-large_map(RandState, K, N, FK, FV, Acc) ->
-    {KK, RS1} = rand:uniform_s(N, RandState),
-    {KV, RS2} = rand:uniform_s(N, RS1),
-    large_map(RS2, K-1, N, FK, FV, [{FK(KK), FV(KV)} | Acc]).
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% META-COMMAND SECTION
@@ -317,19 +292,8 @@ illegal_args(_S) ->
       {{without, list(map_term())}, not_a_map()} %% Requires test with not a list
     ])].
 
-illegal_return(#state { otp_release = "19" } = S, Args) ->
-    illegal_return_r19(S, Args);
-illegal_return(#state { otp_release = "17" } = S, Args) ->
-    illegal_return_r17(S, Args);
-illegal_return(#state { otp_release = "18" } = S, Args) ->
+illegal_return(S, Args) ->
     illegal_return_r18(S, Args).
-
-illegal_return_r17(_S, [{{fold, F, _}, _}]) when not is_function(F, 2) -> {error, function_clause};
-illegal_return_r17(_S, [{{fold, _, _}, _}]) -> {error, function_clause};
-illegal_return_r17(_S, [{size, _}]) -> {error, function_clause};
-illegal_return_r17(_S, [{{without, _}, _}]) -> {error, function_clause};
-illegal_return_r17(_S, [{{with, _}, _}]) -> {error, function_clause};
-illegal_return_r17(_S, [_]) -> {error, badarg}.
 
 %% Note: For 18.x and onwards, we have badmap checks. The order of the pattern
 %% match here is important, as some checks take precedence over other checks.
@@ -356,8 +320,6 @@ illegal_return_r18(_S, [{{is_key, _K}, X}]) when not is_map(X) -> {error, {badma
 illegal_return_r18(_S, [{{update_no_fail, _K, _V}, X}]) when not is_map(X) -> {error, {badmap, X}};
 illegal_return_r18(_S, [{{get_no_fail, _K}, X}]) when not is_map(X) -> {error, {badmap, X}};
 illegal_return_r18(_S, [{{populate, from_list, _L}, _X}]) -> {error, badarg}.
-
-illegal_return_r19(S, Args) -> illegal_return_r18(S, Args).
 
 illegal_features(_S, [{Cmd, _}], _) ->
     case Cmd of
@@ -621,11 +583,9 @@ take_args(#state { contents = C } = S) ->
      [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C/= []] ++
      [{1, ?SUCHTHAT([K], [map_key(S)], find(K,1,C) == false)}]).
      
-take_return(#state { contents = C, otp_release = R } = S, [K]) ->
+take_return(#state { contents = C }, [K]) ->
     case find(K,1,C) of
-       false when R == "19" ->
-           {error, {badmatch, error}};
-       false -> badkey(S, K);
+       false -> badkey(K);
        {K, V} -> V
     end.
 
@@ -652,9 +612,9 @@ m_get_args(#state { contents = C } = S) ->
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= []] ++
       [{1, ?SUCHTHAT([K], [map_key(S)], find(K,1,C) == false)}]).
 
-m_get_return(#state { contents = C } = S, [K]) ->
+m_get_return(#state { contents = C }, [K]) ->
     case find(K,1,C) of
-       false -> badkey(S, K);
+       false -> badkey(K);
        {K, V} -> V
     end.
 
@@ -696,7 +656,7 @@ update_next(#state { contents = C } = State, _, [K, V]) ->
 update_return(#state { contents = C} = S, [K, V]) ->
     case member(K, S) of
         true -> maps:from_list(replace_contents(K, V, C));
-        false -> badarg(S, K)
+        false -> badarg(K)
     end.
 
 update_features(S, [K, _], _) ->
@@ -864,7 +824,6 @@ postcondition_common(S, Call, Res) ->
 
 %% Main property, parameterized over where the map is run:
 map_property(Where) ->
-    OTPRel = erlang:system_info(otp_release),
     ?SETUP(fun() ->
         {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
         erlang:put(colliding_terms, Terms),
@@ -876,7 +835,7 @@ map_property(Where) ->
                 erase(colliding_terms)
         end
     end,
-      ?FORALL(State, gen_initial_state(OTPRel),
+      ?FORALL(State, gen_initial_state(),
       ?FORALL(Cmds, more_commands(2, commands(?MODULE, State)),
         begin
           maps_runner:ensure_started(Where),
@@ -979,13 +938,9 @@ delete(T, Pos, [Tup|Next]) ->
     end.
 
 %% bad_key/2 computes the expected return of a bad key
-badkey(#state { otp_release = "17" }, _Key) -> {error, bad_key};
-badkey(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}};
-badkey(#state { otp_release = "19" }, Key) -> {error, {badkey, Key}}.
+badkey(Key) -> {error, {badkey, Key}}.
 
-badarg(#state { otp_release = "17" }, _Key) -> {error, badarg};
-badarg(#state { otp_release = "18" }, Key) -> {error, {badkey, Key}};
-badarg(#state { otp_release = "19" }, Key) -> {error, {badkey, Key}}.
+badarg(Key) -> {error, {badkey, Key}}.
 
 %% A sort which does things right w.r.t arithmetic/total order.
 sort(L) -> eqc_lib:sort(L).
