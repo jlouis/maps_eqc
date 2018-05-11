@@ -5,7 +5,7 @@
 
 -compile(export_all).
 -compile(nowarn_export_all).
-
+%-compile({parse_transform, eqc_parallelize}).
 -type list_map() :: list({term(), term()}).
 
 -record(state,
@@ -585,7 +585,7 @@ take_args(#state { contents = C } = S) ->
      
 take_return(#state { contents = C }, [K]) ->
     case find(K,1,C) of
-       false -> badkey(K);
+       false -> {error, {badmatch, error}};
        {K, V} -> V
     end.
 
