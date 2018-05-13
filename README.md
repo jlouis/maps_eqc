@@ -129,4 +129,8 @@ We currently test against the following features:
 	R055: badarg check on maps:without/2
 	R056: badkey on a maps:take/2
 	R057: succesful maps:take/2
+    R058: update_with/2 on non-existing key
+    R059: update_with/2 on an existing key
+    R060: update_with/3 on a non-existing key
+    R061: update_with/3 on an existing key
 

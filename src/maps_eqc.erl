@@ -457,38 +457,38 @@ without_q_features(S, [Ks], _) ->
 %% FOLD/3
 %% --------------------------------------------------------------
 
-fold() ->
-    Res = maps_runner:fold(fun(K, V, L) -> [{K, V} | L] end, []),
-    sort(Res).
+%% fold() ->
+%%     Res = maps_runner:fold(fun(K, V, L) -> [{K, V} | L] end, []),
+%%     sort(Res).
     
-fold_args(_S) -> [].
+%% fold_args(_S) -> [].
 
-fold_return(#state { contents = Cs }, _) ->
-    sort(Cs).
+%% fold_return(#state { contents = Cs }, _) ->
+%%     sort(Cs).
     
-fold_features(_S, _, _) ->
-    ["R027: traverse over the map by fold/3"].
+%% fold_features(_S, _, _) ->
+%%     ["R027: traverse over the map by fold/3"].
 
 %% MAP/2
 %% --------------------------------------------------------------
 
-map(F) ->
-     M = maps:map(F, maps_runner:extract()),
-     ok = maps_runner:reset(M),
-     M.
+%% map(F) ->
+%%      M = maps:map(F, maps_runner:extract()),
+%%      ok = maps_runner:reset(M),
+%%      M.
      
-map_args(_S) ->
-  ?LET(F, function2(map_value()), [F]).
+%% map_args(_S) ->
+%%   ?LET(F, function2(map_value()), [F]).
      
-map_next(#state { contents = Cs } = State, _, [F]) ->
-    NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
-    State#state { contents = NCs }.
+%% map_next(#state { contents = Cs } = State, _, [F]) ->
+%%     NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
+%%     State#state { contents = NCs }.
     
-map_return(#state { contents = Cs }, [F]) ->
-    NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
-    maps:from_list(NCs).
+%% map_return(#state { contents = Cs }, [F]) ->
+%%     NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
+%%     maps:from_list(NCs).
     
-map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
+%% map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
 
 %% MERGE/2
 %% --------------------------------------------------------------
@@ -640,10 +640,7 @@ values_features(_S, _, _) ->
 %% --------------------------------------------------------------
 
 update(K, V) ->
-    case maps_runner:update(K, V) of
-        {error, Reason} -> {error, Reason};
-        M -> M
-    end.
+    maps_runner:update(K, V).
     
 update_args(#state { contents = C } = State) ->
     frequency(
@@ -663,6 +660,83 @@ update_features(S, [K, _], _) ->
    case member(K, S) of
         true -> ["R015: update/3 on an existing key"];
         false -> ["R016: update/3 on a non-existing key"]
+   end.
+
+%% UPDATE_WITH
+%% --------------------------------------------------------------
+
+update_with(K, Fun) ->
+    maps_runner:update_with(K, Fun).
+
+update_with_args(#state { contents = C } = State) ->
+    ?LET(HC, map_value(),
+         begin
+             F = fun(_) -> HC end,
+             frequency(
+           [{5, ?LET(Pair, elements(C),
+                     [element(1, Pair), return(F)])} || C /= [] ] ++
+               [{1,  ?SUCHTHAT([K, _V], [map_key(State), return(F)],
+                               find(K, 1, C) == false)}])
+         end).
+    
+update_with_next(#state { contents = C } = State, _, [K, F]) ->
+    case find(K, 1, C) of
+        false -> State;
+        {_, V} ->
+            State#state { contents = replace_contents(K, F(V), C) }
+    end.
+
+update_with_return(#state { contents = C}, [K, F]) ->
+    case find(K, 1, C) of
+        false -> badkey(K);
+        {_, V} ->
+            maps:from_list(replace_contents(K, F(V), C))
+    end.
+
+update_with_features(S, [K, _], _) ->
+   case member(K, S) of
+        false -> ["R058: update_with/2 on a non-existing key"];
+        true -> ["R059: update_with/2 on an existing key"]
+
+   end.
+
+%% UPDATE_WITH_INIT
+%% --------------------------------------------------------------
+
+update_with_init(K, Fun, Init) ->
+    maps_runner:update_with(K, Fun, Init).
+
+update_with_init_args(#state { contents = C } = State) ->
+    ?LET(HC, map_value(),
+       begin
+        F = fun(_) -> HC end,
+        frequency(
+         [{5, ?LET(Pair, elements(C),
+                [element(1, Pair), return(F), map_value()])} || C /= [] ] ++
+         [{1,  ?SUCHTHAT([K, _V, _], [map_key(State), return(F), map_value()],
+                         find(K, 1, C) == false)}])
+       end).
+    
+update_with_init_next(#state { contents = C } = State, _, [K, F, Init]) ->
+    case find(K, 1, C) of
+        false -> State#state { contents = add_contents(K, Init, C)};
+        {_, V} ->
+            State#state { contents = replace_contents(K, F(V), C) }
+    end.
+
+update_with_init_return(#state { contents = C}, [K, F, Init]) ->
+    case find(K, 1, C) of
+        false ->
+            maps:from_list(add_contents(K, Init, C));
+        {_, V} ->
+            maps:from_list(replace_contents(K, F(V), C))
+    end.
+
+update_with_init_features(S, [K, _, _], _) ->
+   case member(K, S) of
+        false -> ["R060: update_with/3 on a non-existing key"];
+        true -> ["R061: update_with/3 on an existing key"]
+
    end.
 
 %% TO_LIST

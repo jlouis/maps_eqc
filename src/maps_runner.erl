@@ -5,6 +5,7 @@
 -export([
 	ensure_started/1,
 	start/0,
+    run/1,
 	start_link/0,
 	reset/0, reset/1
 ]).
@@ -37,6 +38,7 @@
 	size/0,
 	to_list/0,
 	update/2,
+    update_with/2, update_with/3,
 	values/0,
 	with/1, with_q/1,
 	without/1, without_q/1,
@@ -61,15 +63,15 @@ ensure_started(local) ->
 ensure_started(Node) ->
     ensure_started(Node, 10).
     
+run(ReplyPid) ->
+    ?MODULE:start(),
+    timer:sleep(10),
+    ReplyPid ! {started, self()}.
+    
 ensure_started(_Node, 0) -> exit(gave_up_starting);
 ensure_started(Node, K) ->
     ReplyPid = self(),
-    Pid = spawn(Node,
-      fun() ->
-        start(),
-        timer:sleep(10),
-        ReplyPid ! {started, self()}
-      end),
+    Pid = spawn(Node, ?MODULE, run, [ReplyPid]),
     receive
         {started, Pid} -> ok
     after 500 ->
@@ -103,6 +105,8 @@ keys() -> call(keys).
 remove(K) -> call({remove, K}).
 to_list() -> call(to_list).
 update(K, V) -> call({update, K, V}).
+update_with(K, Fun) -> call({update_with, K, Fun}).
+update_with(K, Fun, I) -> call({update_with, K, Fun, I}).
 values() -> call(values).
 m_get(K) -> call({get, K}).
 m_get(K, Def) -> call({get, K, Def}).
@@ -181,6 +185,20 @@ process({update, K, V}, M) ->
         {M2, M2}
     catch
         Class:Err -> {{Class,Err}, M}
+    end;
+process({update_with, K, Fun}, M) ->
+    try
+        M2 = maps:update_with(K, Fun, M),
+        {M2, M2}
+    catch
+        Class:Err -> {{Class, Err}, M}
+    end;
+process({update_with, K, Fun, I}, M) ->
+    try
+        M2 = maps:update_with(K, Fun, I, M),
+        {M2, M2}
+    catch
+        Class:Err -> {{Class, Err}, M}
     end;
 process(values, M) -> {maps:values(M), M};
 process({populate, from_list, L}, _) ->
