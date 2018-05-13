@@ -5,7 +5,7 @@
 
 -compile(export_all).
 -compile(nowarn_export_all).
-%-compile({parse_transform, eqc_parallelize}).
+%%-compile({parse_transform, eqc_parallelize}).
 -type list_map() :: list({term(), term()}).
 
 -record(state,
@@ -16,8 +16,18 @@
 
 -define(LARGE_MAP_RANGE, 65536*65536).
 
+ensure_colliding_terms() ->
+    case get(colliding_terms) of
+        undefined ->
+            {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
+            erlang:put(colliding_terms, Terms),
+            Terms;
+        Terms ->
+            Terms
+    end.
+
 gen_initial_state() ->
-    Colliding = get(colliding_terms),
+    Colliding = ensure_colliding_terms(),
     ?LET(N, choose(0, min(length(Colliding), 64)),
       begin
           {Taken, _} = lists:split(N, Colliding),
@@ -899,8 +909,6 @@ postcondition_common(S, Call, Res) ->
 %% Main property, parameterized over where the map is run:
 map_property(Where) ->
     ?SETUP(fun() ->
-        {ok, [Terms]} = file:consult("priv/colliding_terms.term"),
-        erlang:put(colliding_terms, Terms),
         fun() ->
                 case global:whereis_name(maps_runner) of
                     undefined -> ok;
