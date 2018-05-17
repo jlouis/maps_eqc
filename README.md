@@ -133,4 +133,8 @@ We currently test against the following features:
     R059: update_with/2 on an existing key
     R060: update_with/3 on a non-existing key
     R061: update_with/3 on an existing key
-
+    R062: filter/2 on the map
+    R063: iterator filter/2 on the map
+    R064: iterator traverse over the map by fold/3
+    R065: using the map/2 functor on the iterated map()
+    R066: using iterator/1 over the map

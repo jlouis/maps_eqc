@@ -14,6 +14,7 @@
       persist = [] :: list({reference(), list_map()}) %% Remembered older versions
     }).
 
+-define(EPSILON, 0.000000000001).
 -define(LARGE_MAP_RANGE, 65536*65536).
 
 ensure_colliding_terms() ->
@@ -49,11 +50,26 @@ evil_real() ->
      {1, return(0.0)},
      {1, return(0.0/-1)}]).
 
+%% Erlang's handling of real numbers require something like this
+%% Real numbers allow two representations of 0: 0.0 and -0.0. Erlang
+%% internally accepts both versions, but always prints them as 0.0
+%%
+%% But when we call term_to_binary/1 on those reals, we get different
+%% answers. We don't want this.
+nice_real() ->
+    ?LET(R, real(),
+         case R =:= 0.0 of
+             true -> R+?EPSILON;
+             false -> R
+         end).
+
 %% Either generate a simple scalar map term, or generate a composite map term.
 map_term(0) ->
-    frequency([
-       {100, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), evil_real()])},
-       {10, ?SHRINK(oneof([function0(int()), function2(int())]), [foo])}
+    frequency(
+      [
+       {100, oneof([int(), largeint(), atom(), binary(), bitstring(), bool(), char(), nice_real()])},
+       {10, ?SHRINK(oneof([function1(map_term()), function2(map_term())]), [foo])},
+       {10, {int(), int(), int()}} %% Fake an iterator, since they are usually not valid
        % {10, eqc_gen:largebinary()}
     ]);
 map_term(K) ->
@@ -103,7 +119,7 @@ map_value() -> map_term().
 %% sized.
 gen_map(State) ->
   ?SIZED(Sz, resize(Sz * 15, list({resize(Sz, map_key(State)), resize(Sz, map_value())}))).
-  	
+
 %% Default way to generate a list which can subsequently be used to populate
 %% a map.
 map_list() ->
@@ -117,6 +133,10 @@ map_map() ->
 
 map_map(State) ->
     ?LET(ML, map_list(State), maps:from_list(ML)).
+
+%% Iterators
+iterated() ->
+    oneof([normal, iterator]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% META-COMMAND SECTION
@@ -132,27 +152,27 @@ map_map(State) ->
 %% Also, allow us to become an older version of the map some times.
 remember(Ref) ->
     maps_runner:remember(Ref).
-    
+
 remember_args(_S) -> [make_ref()].
 
 remember_next(#state { contents = Cs, persist = Ps } = State, _, [Ref]) ->
     State#state { persist = lists:keystore(Ref, 1, Ps, {Ref, Cs}) }.
-    
+
 remember_return(_S, [_Ref]) ->
     ok.
-    
+
 %% We hardly need a feature for this
 
 recall(Ref) ->
     maps_runner:recall(Ref).
-    
+
 %% Can only recall when there are persisted maps to recall
 recall_pre(#state { persist = Ps }) -> Ps /= [].
 
 recall_args(#state { persist = Ps }) ->
     ?LET(Pair, elements(Ps),
        [element(1, Pair)]).
-       
+
 recall_pre(#state { persist = Ps}, [Ref]) ->
     lists:keyfind(Ref,1,Ps) /= false.
 
@@ -165,20 +185,20 @@ recall_features(_S, _, _) ->
 
 become(Ref) ->
     maps_runner:become(Ref).
-    
+
 become_pre(#state { persist = Ps }) -> Ps /= [].
 
 become_args(#state { persist = Ps }) ->
     ?LET(Pair, elements(Ps),
         [element(1, Pair)]).
-        
+
 become_next(#state { persist = Ps } = State, _, [Ref]) ->
     {value, {Ref, Old}, Ps2} = lists:keytake(Ref, 1, Ps),
     State#state { persist = Ps2, contents = Old }.
-    
+
 become_return(_S, [_Ref]) ->
     ok.
-    
+
 become_features(_S, [_Ref], _) ->
     ["R039: Refocus and \"become\" an old version of the map"].
 
@@ -188,12 +208,12 @@ become_features(_S, [_Ref], _) ->
 %% consistent.
 extract() ->
     maps_runner:extract().
-    
+
 extract_args(_S) -> [].
 
 extract_return(#state { contents = Cs }, []) ->
     maps:from_list(Cs).
-    
+
 extract_features(_S, _, _) ->
     ["R036: Maps are consistent when sending them to another process"].
 
@@ -203,12 +223,12 @@ extract_features(_S, _, _) ->
 roundtrip() ->
     M = maps_runner:extract(),
     maps_runner:eq(M).
-    
+
 roundtrip_args(_S) -> [].
 
 roundtrip_return(_S, []) ->
     true.
-    
+
 roundtrip_features(_S, _, _) ->
     ["R037: Maps sent roundtrip through another process are reflexive"].
 
@@ -228,9 +248,17 @@ populate_pre(#state { contents = C }) -> C == [].
 populate_args(State) ->
   [oneof([from_list, puts]),
    map_list(State)].
-    
-populate_next(State, _, [_Variant, Elems]) ->
-    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
+
+populate_next(State, _, [Variant, Elems]) ->
+    Contents = case Variant of
+                   puts ->
+                       lists:foldl(
+                         fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems);
+                   from_list ->
+                       lists:foldl(
+                         fun({K, V}, M) -> add_contents(K, V, M, overwrite) end,
+                         [], Elems)
+               end,
     State#state { contents = Contents }.
 
 populate_return(_State, [_Variant, Elems]) ->
@@ -254,7 +282,7 @@ not_a_map() ->
 
 not_a_list() ->
     ?SUCHTHAT(X, map_term(), not is_list(X)).
-    
+
 not_a_function_2() ->
     ?SUCHTHAT(X, map_term(), not is_function(X, 2)).
 
@@ -272,13 +300,13 @@ wrong_list() ->
           end,
           L))
     ]).
-                   
+
 irrelevant() ->
     oneof([eqc_gen:map(int(), int()), not_a_map()]).
 
 illegal({Command, NotAMap}) ->
     maps_runner:illegal(Command, NotAMap).
-    
+
 illegal_args(_S) ->
     [oneof([
       {size, not_a_map()},
@@ -294,8 +322,8 @@ illegal_args(_S) ->
       {{find, map_term()}, not_a_map()},
       {{merge, {oneof([left, right]), not_a_map()}}, irrelevant()},
       {{merge, {oneof([left, right]), irrelevant()}}, not_a_map()},
-      {{fold, function2(int()), map_term()}, not_a_map()},
-      {{fold, not_a_function_2(), map_term()}, irrelevant()},
+      {{fold, function2(int()), map_term(), iterated()}, not_a_map()},
+      {{fold, not_a_function_2(), map_term(), iterated()}, irrelevant()},
       {{with, not_a_list()}, irrelevant()},
       {{with, list(map_term())}, not_a_map()},
       {{without, not_a_list()}, irrelevant()},
@@ -307,8 +335,8 @@ illegal_return(S, Args) ->
 
 %% Note: For 18.x and onwards, we have badmap checks. The order of the pattern
 %% match here is important, as some checks take precedence over other checks.
-illegal_return_r18(_S, [{{fold, _, _}, X}]) when not is_map(X) -> {error, {badmap, X}};
-illegal_return_r18(_S, [{{fold, F, _}, _}]) when not is_function(F, 2) -> {error, badarg};
+illegal_return_r18(_S, [{{fold, _, _, _}, X}]) when not is_map(X) -> {error, {badmap, X}};
+illegal_return_r18(_S, [{{fold, F, _, _}, _}]) when not is_function(F, 2) -> {error, badarg};
 illegal_return_r18(_S, [{size, X}]) when not is_map(X) -> {error, {badmap, X}};
 illegal_return_r18(_S, [{{without, _}, X}]) when not is_map(X) -> {error, {badmap, X}};
 illegal_return_r18(_S, [{{without, _}, _}]) -> {error, badarg};
@@ -345,7 +373,7 @@ illegal_features(_S, [{Cmd, _}], _) ->
          {get_no_fail, _} -> ["R050: badarg check on maps:get/2"];
          {find, _} -> ["R051: badarg check on maps:find/2"];
          {merge, _} -> ["R052: badarg check on maps:merge/2"];
-         {fold, _, _} -> ["R053: badarg check on maps:fold/3"];
+         {fold, _, _, _} -> ["R053: badarg check on maps:fold/3"];
          {with, _} -> ["R054: badarg check on maps:with/2"];
          {without, _} -> ["R055: badarg check on maps:without/2"]
      end.
@@ -355,16 +383,16 @@ illegal_features(_S, [{Cmd, _}], _) ->
 %% Meta-command which tests conversion to/from binary data
 convert() ->
     maps_runner:convert().
-    
+
 convert_args(_S) ->
     [].
-    
+
 convert_return(#state { contents = Cs }, []) ->
     maps:from_list(Cs).
 
 convert_features(_S, [], _) ->
     ["R040: Converted map there and back again"].
-    
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% COMMAND SECTION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -387,7 +415,7 @@ with_args(#state { contents = Cs } = State) ->
           ?LET({P, N}, {list(elements(Cs)), list(map_key(State))},
              [P ++ N])
     end.
-    
+
 with_next(#state { contents = Cs } = State, _, [Ks]) ->
     State#state { contents = [{K, V} || {K, V} <- Cs, lists:member(K, Ks)] }.
 
@@ -403,7 +431,7 @@ with_features(S, [Ks], _) ->
 
 with_q(Ks) ->
     maps_runner:with_q(Ks).
-    
+
 with_q_args(#state { contents = Cs} = State) ->
     case Cs of
         [] -> [list(map_key(State))];
@@ -411,10 +439,10 @@ with_q_args(#state { contents = Cs} = State) ->
           ?LET({P, N}, {list(elements(Cs)), list(map_key(State))},
              [P ++ N])
     end.
-    
+
 with_q_return(#state { contents = Cs }, [Ks]) ->
     maps:from_list([{K, V} || {K, V} <- Cs, lists:member(K, Ks)]).
-    
+
 with_q_features(S, [Ks], _) ->
     ["R028: with/2 query on present keys" || present(Ks, S)] ++
     ["R029: with/2 query on non-existing keys" || non_existing(Ks, S)].
@@ -424,7 +452,7 @@ with_q_features(S, [Ks], _) ->
 
 without(Ks) ->
     maps_runner:without(Ks).
-    
+
 without_args(#state { contents = Cs} = State) ->
     case Cs of
         [] -> [list(map_key(State))];
@@ -432,7 +460,7 @@ without_args(#state { contents = Cs} = State) ->
           ?LET({P, N}, {list(elements(Cs)), list(map_key(State))},
              [P ++ N])
     end.
-    
+
 without_next(#state { contents = Cs } = State, _, [Ks]) ->
     State#state { contents = [{K, V} || {K, V} <- Cs, not lists:member(K, Ks)] }.
 
@@ -440,15 +468,15 @@ without_return(#state { contents = Cs }, [Ks]) ->
     maps:from_list([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
 
 without_features(S, [Ks], _) ->
-    ["R034: withtout/2 on present keys" || present(Ks, S)] ++
-    ["R035: withtout/2 on non-existing keys" || non_existing(Ks, S)].
-    
+    ["R034: without/2 on present keys" || present(Ks, S)] ++
+    ["R035: without/2 on non-existing keys" || non_existing(Ks, S)].
+
 %% WITHOUT/2 (Query)
 %% --------------------------------------------------------------
 
 without_q(Ks) ->
     maps_runner:without_q(Ks).
-    
+
 without_q_args(#state { contents = Cs} = State) ->
     case Cs of
         [] -> [list(map_key(State))];
@@ -456,56 +484,102 @@ without_q_args(#state { contents = Cs} = State) ->
           ?LET({P, N}, {list(elements(Cs)), list(map_key(State))},
              [P ++ N])
     end.
-    
+
 without_q_return(#state { contents = Cs }, [Ks]) ->
     maps:from_list([{K, V} || {K, V} <- Cs, not lists:member(K, Ks)]).
 
 without_q_features(S, [Ks], _) ->
     ["R030: withtout/2 query on present keys" || present(Ks, S)] ++
     ["R031: withtout/2 query on non-existing keys" || non_existing(Ks, S)].
-    
+
 %% FOLD/3
 %% --------------------------------------------------------------
 
-%% fold() ->
-%%     Res = maps_runner:fold(fun(K, V, L) -> [{K, V} | L] end, []),
-%%     sort(Res).
-    
-%% fold_args(_S) -> [].
+fold(Iterated) ->
+    Res = maps_runner:fold(fun(K, V, L) -> [{K, V} | L] end, [], Iterated),
+    sort(Res).
 
-%% fold_return(#state { contents = Cs }, _) ->
-%%     sort(Cs).
-    
-%% fold_features(_S, _, _) ->
-%%     ["R027: traverse over the map by fold/3"].
+fold_args(_S) -> [iterated()].
+
+fold_return(#state { contents = Cs }, _) ->
+    sort(Cs).
+
+fold_features(_S, [Iterated], _) ->
+    case Iterated of
+        normal -> ["R027: traverse over the map by fold/3"];
+        iterator -> ["R064: iterator traverse over the map by fold/3"]
+    end.
+
+%% FILTER/3
+%% ------------------------------------------------------------
+filter(Pred, Iterated) ->
+    M = maps_runner:filter(Pred, Iterated),
+    ok = maps_runner:reset(M),
+    M.
+
+filter_args(_S) ->
+    [function2(bool()), iterated()].
+
+filter_next(#state { contents = Cs } = State, _, [F, _]) ->
+    NCs = lists:filter(fun({K, V}) -> F(K, V) end, Cs),
+    State#state { contents = NCs }.
+
+filter_return(#state { contents = Cs }, [F, _]) ->
+    NCs = lists:filter(fun({K, V}) -> F(K, V) end, Cs),
+    maps:from_list(NCs).
+
+filter_features(_S, [_, Iterated], _) ->
+    case Iterated of
+        normal -> ["R062: normal filter/2 on the map"];
+        iterator -> ["R063: iterator filter/2 on the map"]
+    end.
+
+%% NEXT/1
+%% --------------------------------------------------------------
+iterate() ->
+    sort(maps_runner:next()).
+
+iterate_args(_S) ->
+    [].
+
+iterate_next(S, _, []) ->
+    S.
+
+iterate_return(#state { contents = Cs }, _) ->
+    sort(Cs).
+
+iterate_features(_S, _, _) ->
+    ["R066: iterator/1 over the map"].
 
 %% MAP/2
 %% --------------------------------------------------------------
 
-%% map(F) ->
-%%      M = maps:map(F, maps_runner:extract()),
-%%      ok = maps_runner:reset(M),
-%%      M.
-     
-%% map_args(_S) ->
-%%   ?LET(F, function2(map_value()), [F]).
-     
-%% map_next(#state { contents = Cs } = State, _, [F]) ->
-%%     NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
-%%     State#state { contents = NCs }.
-    
-%% map_return(#state { contents = Cs }, [F]) ->
-%%     NCs = lists:map(fun({K, V}) -> {K, F(K,V)} end, Cs),
-%%     maps:from_list(NCs).
-    
-%% map_features(_S, _, _) -> ["R026: using the map/2 functor on the map()"].
+map(F, Iter) ->
+    maps_runner:map(F, Iter).
+
+map_args(_S) ->
+    [function2(map_value()), iterated()].
+
+map_next(#state { contents = Cs } = State, _, [F, _]) ->
+    NCs = lists:map(fun({K, V}) -> {K, maps_runner:m_apply(F, [K,V])} end, Cs),
+    State#state { contents = NCs }.
+
+map_return(#state { contents = Cs }, [F, _]) ->
+    NCs = lists:map(fun({K, V}) -> {K, maps_runner:m_apply(F, [K,V])} end, Cs),
+    maps:from_list(NCs).
+
+map_features(_S, [_, Iter], _) ->
+    case Iter of
+        normal -> ["R026: using the map/2 functor on the map()"];
+        iterator -> ["R065: using the map/2 functor on the iterated map()"]
+    end.
 
 %% MERGE/2
 %% --------------------------------------------------------------
 
 merge(Instructions) ->
     maps_runner:merge(Instructions).
-    
+
 merge_args(State) ->
     oneof([
          [{left, ?LET(Elems, list({map_key(State), map_value()}), maps:from_list(Elems))}],
@@ -517,22 +591,22 @@ merge_args(State) ->
 
          [identity]
     ]).
-        
+
 merge_next(S, _, [identity]) -> S;
 merge_next(#state { contents = C } = State, _, [{right, M}]) ->
-    NC = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
+    NC = maps:fold(fun (K, V, Cs) -> store(K, V, Cs, keep) end, C, M),
     State#state { contents = NC };
 merge_next(#state { contents = C } = State, _, [{left, M}]) ->
-    NC = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, 1, Cs, {K, V}) end, C, M),
+    NC = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, V, Cs) end, C, M),
     State#state { contents = NC }.
 
 merge_return(#state { contents = C }, [identity]) ->
     maps:from_list(C);
 merge_return(#state { contents = C }, [{right, M}]) ->
-    Res = maps:fold(fun (K, V, Cs) -> store(K, 1, Cs, {K, V}) end, C, M),
+    Res = maps:fold(fun (K, V, Cs) -> store(K, V, Cs, keep) end, C, M),
     maps:from_list(Res);
 merge_return(#state { contents = C }, [{left, M}]) ->
-    Res = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, 1, Cs, {K, V}) end, C, M),
+    Res = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, V, Cs) end, C, M),
     maps:from_list(Res).
 
 merge_features(_S, _, _) ->
@@ -587,12 +661,12 @@ m_get_default_features(S, [K, _Default], _) ->
 
 take(K) ->
     maps_runner:take(K).
-    
+
 take_args(#state { contents = C } = S) ->
    frequency(
      [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C/= []] ++
      [{1, ?SUCHTHAT([K], [map_key(S)], find(K,1,C) == false)}]).
-     
+
 take_return(#state { contents = C }, [K]) ->
     case find(K,1,C) of
        false -> {error, {badmatch, error}};
@@ -637,7 +711,7 @@ m_get_features(_S, _, _) -> ["R023: get on a successful key"].
 
 values() ->
     sort(maps_runner:values()).
-    
+
 values_args(_S) -> [].
 
 values_return(#state { contents = C }, []) ->
@@ -651,12 +725,12 @@ values_features(_S, _, _) ->
 
 update(K, V) ->
     maps_runner:update(K, V).
-    
+
 update_args(#state { contents = C } = State) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair), map_value()])} || C /= [] ] ++
       [{1,  ?SUCHTHAT([K, _V], [map_key(State), map_value()], find(K, 1, C) == false)}]).
-        
+
 update_next(#state { contents = C } = State, _, [K, V]) ->
     State#state { contents = replace_contents(K, V, C) }.
 
@@ -679,28 +753,27 @@ update_with(K, Fun) ->
     maps_runner:update_with(K, Fun).
 
 update_with_args(#state { contents = C } = State) ->
-    ?LET(HC, map_value(),
-         begin
-             F = fun(_) -> HC end,
-             frequency(
-           [{5, ?LET(Pair, elements(C),
-                     [element(1, Pair), return(F)])} || C /= [] ] ++
-               [{1,  ?SUCHTHAT([K, _V], [map_key(State), return(F)],
-                               find(K, 1, C) == false)}])
-         end).
-    
+    frequency(
+      [{5, ?LET(Pair, elements(C),
+                [element(1, Pair), function1(map_value())])}
+       || C /= [] ] ++
+      [{1,  ?SUCHTHAT([K, _V], [map_key(State), function1(map_value())],
+                      find(K, 1, C) == false)}]).
+
 update_with_next(#state { contents = C } = State, _, [K, F]) ->
     case find(K, 1, C) of
         false -> State;
         {_, V} ->
-            State#state { contents = replace_contents(K, F(V), C) }
+            Res = maps_runner:m_apply(F, [V]),
+            State#state { contents = replace_contents(K, Res, C) }
     end.
 
 update_with_return(#state { contents = C}, [K, F]) ->
     case find(K, 1, C) of
         false -> badkey(K);
         {_, V} ->
-            maps:from_list(replace_contents(K, F(V), C))
+            Res = maps_runner:m_apply(F, [V]),
+            maps:from_list(replace_contents(K, Res, C))
     end.
 
 update_with_features(S, [K, _], _) ->
@@ -726,7 +799,7 @@ update_with_init_args(#state { contents = C } = State) ->
          [{1,  ?SUCHTHAT([K, _V, _], [map_key(State), return(F), map_value()],
                          find(K, 1, C) == false)}])
        end).
-    
+
 update_with_init_next(#state { contents = C } = State, _, [K, F, Init]) ->
     case find(K, 1, C) of
         false -> State#state { contents = add_contents(K, Init, C)};
@@ -755,7 +828,7 @@ update_with_init_features(S, [K, _, _], _) ->
 to_list() ->
     L  = maps_runner:to_list(),
     sort(L).
-    
+
 to_list_args(_S) -> [].
 
 to_list_return(#state { contents = C }, []) ->
@@ -763,18 +836,18 @@ to_list_return(#state { contents = C }, []) ->
 
 to_list_features(_, _, _) ->
     ["R013: to_list/1 called on map"].
-    
+
 %% REMOVE
 %% --------------------------------------------------------------
 
 remove(K) ->
     maps_runner:remove(K).
-    
+
 remove_args(#state { contents = C } = State) ->
     frequency(
       [{5, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
       [{1,  ?SUCHTHAT([K], [map_key(State)], find(K, 1, C) == false)}]).
-        
+
 remove_next(#state { contents = C } = State, _, [K]) ->
     State#state { contents = del_contents(K, C) }.
 
@@ -792,7 +865,7 @@ remove_features(S, [K], _) ->
 
 keys() ->
     sort(maps_runner:keys()).
-    
+
 keys_args(_S) -> [].
 
 keys_return(#state { contents = C }, []) ->
@@ -805,7 +878,7 @@ keys_features(_S, _, _) -> ["R010: Calling keys/1 on the map"].
 
 is_key(K) ->
     maps_runner:is_key(K).
-    
+
 is_key_args(#state { contents = C } = State) ->
     frequency(
         [{10, ?LET(Pair, elements(C), [element(1, Pair)])} || C /= [] ] ++
@@ -822,7 +895,7 @@ is_key_features(_S, [_K], false) -> ["R002: is_key/2 on a non-existing key"].
 
 put(Key, Value) ->
     maps_runner:put(Key, Value).
-    
+
 put_args(State) ->
     [map_key(State), map_value()].
 
@@ -842,12 +915,12 @@ put_features(S, [K, _Value], _Res) ->
 %% --------------------------------------------------------------
 size() ->
     maps_runner:size().
-    
+
 size_args(_S) -> [].
 
 size_return(#state { contents = C }, []) ->
     length(C).
-    
+
 size_features(_S, [], Sz) ->
    if
      Sz >= 128 -> ["R005: size/1 on a 128+ map"];
@@ -872,10 +945,10 @@ size_features(_S, [], Sz) ->
 %% with the problem. We do call them from time to time however.
 
 %% Currently disabled commands
-weight(_S, map) -> 0;
+weight(_S, map) -> 10;
 %% Population can only happen from the empty map, so it is very likely to fire
 weight(_S, populate) -> 200;
-%% Make map-altering operations with great impact unlikely 
+%% Make map-altering operations with great impact unlikely
 weight(_S, with) -> 1;
 weight(_S, without) -> 1;
 %% Consistency checks probably find stuff even if called a bit rarer
@@ -893,7 +966,7 @@ weight(_S, update) -> 20;
 weight(_S, merge) -> 15;
 %% Default weight is 10 so we can make commands *less* likely than the default
 %% Negative tests just have to be there once in a while:
-weight(_S, illegal) -> 5;
+weight(_S, illegal) -> 0; %% Disabled
 %% Conversion has to be checked sometimes, but not too often
 weight(_S, convert) -> 5;
 weight(_S, _) -> 10.
@@ -935,7 +1008,7 @@ prop_map_distributed() ->
         pang -> true;
         pong -> map_property('runner@127.0.0.1')
     end.
-    
+
 property_weight(local, prop_map_local) -> 1;
 property_weight(local, prop_map_distributed) -> 0;
 property_weight(distributed, prop_map_local) -> 0;
@@ -944,10 +1017,25 @@ property_weight(_, _) -> 1.
 
 model_size(#state { contents = Cs }) -> length(Cs).
 
+local(Secs) ->
+    eqc:quickcheck(eqc:testing_time(Secs, prop_map_local())).
+
+bugs() -> bugs(20).
+bugs(N) ->
+    eqc_statem:more_bugs(prop_map_local(), N).
+
+distributed(Secs) ->
+    eqc:quickcheck(eqc:testing_time(Secs, prop_map_distributed())).
+
+rc(local) ->
+    eqc:recheck(eqc_statem:show_states(prop_map_local()));
+rc(distributed) ->
+    eqc:recheck(eqc_statem:show_states(prop_map_distributed())).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HELPER ROUTINES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 
+%%
 %% Various helper routines used by the model in more than one place.
 %%
 
@@ -955,14 +1043,18 @@ model_size(#state { contents = Cs }) -> length(Cs).
 %% These implements list-operations on which =:= is used over == to make sure
 %% that 0 and 0.0 compares as different elements. This lets us use lists as an
 %% isomorphic representation of maps in the model.
+
+add_contents(K, V, C, overwrite) ->
+    store(K, V, C, overwrite).
+
 add_contents(K, V, C) ->
-    store(K, 1, C, {K, V}).
+    store(K, V, C, keep).
 
 del_contents(K, C) ->
     delete(K, 1, C).
 
 replace_contents(K, V, C) ->
-    replace(K, 1, C, {K, V}).
+    replace(K, V, C).
 
 member(K, #state { contents = C }) ->
     member(K, 1, C).
@@ -973,22 +1065,22 @@ random_key(#state { contents = C }) ->
 
 present(Ks, S) ->
     lists:any(fun(K) -> member(K, S) end, Ks).
-    
+
 non_existing(Ks, S) ->
     lists:any(fun(K) -> not member(K, S) end, Ks).
 
-store(_T, _Pos, [], New) -> [New];
-store(T, Pos, [Tup|Next], New) ->
-    case element(Pos, Tup) =:= T of
-        true -> [New | Next];
-        false -> [Tup | store(T, Pos, Next, New)]
+store(T, V, [], _) -> [{T, V}];
+store(T, N, [{K, V}|Next], Kind) ->
+    case T =:= K of
+        true -> [{case Kind of keep -> K; overwrite -> T end, N}|Next];
+        false -> [{K, V}| store(T, N, Next, Kind)]
     end.
 
-store_reject_dups(_T, _Pos, [], New) -> [New];
-store_reject_dups(T, Pos, [Tup|Next], New) ->
-   case element(Pos, Tup) =:= T of
-       true -> [Tup|Next];
-       false -> [Tup | store_reject_dups(T, Pos, Next, New)]
+store_reject_dups(T, New, []) -> [{T, New}];
+store_reject_dups(T, New, [{K, V}|Next]) ->
+   case K =:= T of
+       true -> [{K, V}|Next];
+       false -> [{K, V}|store_reject_dups(T, New, Next)]
    end.
 
 find(_T, _Pos, []) -> false;
@@ -997,7 +1089,7 @@ find(T, Pos, [Tup|Next]) ->
         true -> Tup;
         false -> find(T, Pos, Next)
     end.
-    
+
 member(_T, _Pos, []) -> false;
 member(T, Pos, [Tup|Next]) ->
      case element(Pos, Tup) =:= T of
@@ -1005,11 +1097,11 @@ member(T, Pos, [Tup|Next]) ->
          false -> member(T, Pos, Next)
      end.
 
-replace(_T, _Pos, [], _New) -> [];
-replace(T, Pos, [Tup|Next], New) ->
-    case element(Pos, Tup) =:= T of
-        true -> [New | Next];
-        false -> [Tup | replace(T, Pos, Next, New)]
+replace(_T, _New, []) -> [];
+replace(T, New, [{K, V}|Next]) ->
+    case T =:= K of
+        true -> [{K, New} | Next];
+        false -> [{K, V} | replace(T, New, Next)]
     end.
 
 delete(_T, _Pos, []) -> [];

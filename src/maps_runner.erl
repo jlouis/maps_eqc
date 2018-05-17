@@ -24,28 +24,32 @@
 ]).
 
 %% The real commands we can execute
--export([
-	find/1,
-	fold/2,
+-export(
+   [find/1,
+	fold/3,
 	is_key/1,
 	keys/0,
-	%% map/1, % Implemented directly in maps_eqc
-	merge/1,
 	m_get/1, m_get/2,
+	merge/1,
 	populate/2,
 	put/2,
 	remove/1,
 	size/0,
+	take/1,
 	to_list/0,
 	update/2,
-    update_with/2, update_with/3,
 	values/0,
 	with/1, with_q/1,
 	without/1, without_q/1,
-	take/1
-]).
+    filter/2,
+    map/2,
+    next/0,
+    update_with/2, update_with/3 ]).
+
+-export([m_apply/2]).
 
 -record(state,{
+    rel :: integer(), %% The release version of OTP
 	m :: map(), %% The map we are testing
 	persist :: [{reference(), map()}] %% The persistence list
 }).
@@ -62,12 +66,12 @@ ensure_started(local) ->
     end;
 ensure_started(Node) ->
     ensure_started(Node, 10).
-    
+
 run(ReplyPid) ->
     ?MODULE:start(),
     timer:sleep(10),
     ReplyPid ! {started, self()}.
-    
+
 ensure_started(_Node, 0) -> exit(gave_up_starting);
 ensure_started(Node, K) ->
     ReplyPid = self(),
@@ -113,22 +117,35 @@ m_get(K, Def) -> call({get, K, Def}).
 find(K) -> call({find, K}).
 populate(Variant, Elems) -> call({populate, Variant, Elems}).
 merge(Isns) -> call({merge, Isns}).
-fold(F, Init) -> call({fold, F, Init}).
+fold(F, Init, normal) -> call({fold, F, Init});
+fold(F, Init, iterator) -> call({iterated, {fold, F, Init}}).
+map(F, normal) -> call({map, F});
+map(F, iterator) -> call({iterated, {map, F}}).
+filter(F, normal) -> call({filter, F});
+filter(F, iterator) -> call({iterated, {filter, F}}).
 with_q(Ks) -> call({with_q, Ks}).
 with(Ks) -> call({with, Ks}).
 without_q(Ks) -> call({without_q, Ks}).
 without(Ks) -> call({without, Ks}).
 take(K) -> call({take, K}).
+next() -> call(next).
+
+m_apply(Fun, Args) ->
+    call({apply, Fun, Args}).
 
 call(X) ->
     gen_server:call({global, ?MODULE}, X).
 
 init([]) ->
-    {ok, #state { m = #{}, persist = [] } }.
-    
+    OtpRel = list_to_integer(erlang:system_info(otp_release)),
+
+    {ok, #state { m = #{}, persist = [], rel = OtpRel } }.
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
-    
+
+handle_call({apply, Fun, Args}, _From, State) ->
+    {reply, apply(Fun, Args), State};
 handle_call({become, Ref}, _From, #state { persist = Ps } = State) ->
     {value, {Ref, Old}, Ps2} = lists:keytake(Ref, 1, Ps),
     {reply, ok, State#state { m = Old, persist = Ps2 }};
@@ -145,16 +162,32 @@ handle_call({illegal, Cmd, Map}, _From, State) ->
         Class:Reason ->
            {reply, {Class, Reason}, State}
     end;
+handle_call(next, _From, #state { m = M, rel = Rel } = State)
+  when Rel > 20 ->
+    {reply, process_next(maps:next(maps:iterator(M))), State};
+handle_call(next, _From, #state { m = M } = State) ->
+    {reply, maps:to_list(M), State};
+handle_call({iterated, C}, _From,
+            #state { m = M, rel = Rel } = State) when Rel > 20 ->
+    {R, M2} = process(C, maps:iterator(M)),
+    case C of
+        {map, _F} ->
+            {reply, R, State#state { m = M2 }};
+        _ ->
+            {reply, R, State#state { m = M }}
+    end;
+handle_call({iterated, C}, From, State) ->
+    handle_call(C, From, State);
 handle_call(C, _From, #state { m = M } = State) ->
     {R, M2} = process(C, M),
     {reply, R, State#state { m = M2 }}.
-    
+
 handle_info(_Info, State) ->
     {noreply, State}.
-    
+
 code_change(_Oldvsn, State, _Aux) ->
     {ok, State}.
-    
+
 terminate(_Reason, _State) ->
     ok.
 
@@ -235,7 +268,14 @@ process({merge, Isns}, M) ->
     		{right, M2} -> maps:merge(M, M2)
     end,
     {Res, Res};
-process({fold, F, Init}, M) -> {maps:fold(F, Init, M), M};
+process({fold, F, Init}, M) ->
+    {maps:fold(F, Init, M), M};
+process({map, F}, M) ->
+    NM = maps:map(F, M),
+    {NM, NM};
+process({filter, F}, M) ->
+    NM = maps:filter(F, M),
+    {NM, NM};
 process({with_q, Ks}, M) ->
     {maps:with(Ks, M), M};
 process({with, Ks}, M) ->
@@ -246,5 +286,8 @@ process({without_q, Ks}, M) ->
 process({without, Ks}, M) ->
     M2 = maps:without(Ks, M),
     {M2, M2};
-process(_, M) -> {{error, unknown_call}, M}.
+process(C, M) -> {{error, {unknown_call, C}}, M}.
 
+process_next(none) -> [];
+process_next({K, V, Next}) ->
+    [{K, V} | process_next(maps:next(Next))].
