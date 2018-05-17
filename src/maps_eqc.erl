@@ -249,20 +249,13 @@ populate_args(State) ->
   [oneof([from_list, puts]),
    map_list(State)].
 
-populate_next(State, _, [Variant, Elems]) ->
-    Contents = case Variant of
-                   puts ->
-                       lists:foldl(
-                         fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems);
-                   from_list ->
-                       lists:foldl(
-                         fun({K, V}, M) -> add_contents(K, V, M, overwrite) end,
-                         [], Elems)
-               end,
+populate_next(State, _, [_Variant, Elems]) ->
+    Contents = lists:foldl(
+                 fun({K, V}, M) -> store(K, V, M) end, [], Elems),
     State#state { contents = Contents }.
 
 populate_return(_State, [_Variant, Elems]) ->
-    Contents = lists:foldl(fun({K, V}, M) -> add_contents(K, V, M) end, [], Elems),
+    Contents = lists:foldl(fun({K, V}, M) -> store(K, V, M) end, [], Elems),
     maps:from_list(Contents).
 
 populate_features(_S, [Variant, _M], _) ->
@@ -594,7 +587,7 @@ merge_args(State) ->
 
 merge_next(S, _, [identity]) -> S;
 merge_next(#state { contents = C } = State, _, [{right, M}]) ->
-    NC = maps:fold(fun (K, V, Cs) -> store(K, V, Cs, keep) end, C, M),
+    NC = maps:fold(fun (K, V, Cs) -> store(K, V, Cs) end, C, M),
     State#state { contents = NC };
 merge_next(#state { contents = C } = State, _, [{left, M}]) ->
     NC = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, V, Cs) end, C, M),
@@ -603,7 +596,7 @@ merge_next(#state { contents = C } = State, _, [{left, M}]) ->
 merge_return(#state { contents = C }, [identity]) ->
     maps:from_list(C);
 merge_return(#state { contents = C }, [{right, M}]) ->
-    Res = maps:fold(fun (K, V, Cs) -> store(K, V, Cs, keep) end, C, M),
+    Res = maps:fold(fun (K, V, Cs) -> store(K, V, Cs) end, C, M),
     maps:from_list(Res);
 merge_return(#state { contents = C }, [{left, M}]) ->
     Res = maps:fold(fun (K, V, Cs) -> store_reject_dups(K, V, Cs) end, C, M),
@@ -732,11 +725,11 @@ update_args(#state { contents = C } = State) ->
       [{1,  ?SUCHTHAT([K, _V], [map_key(State), map_value()], find(K, 1, C) == false)}]).
 
 update_next(#state { contents = C } = State, _, [K, V]) ->
-    State#state { contents = replace_contents(K, V, C) }.
+    State#state { contents = replace(K, V, C) }.
 
 update_return(#state { contents = C} = S, [K, V]) ->
     case member(K, S) of
-        true -> maps:from_list(replace_contents(K, V, C));
+        true -> maps:from_list(replace(K, V, C));
         false -> badarg(K)
     end.
 
@@ -765,7 +758,7 @@ update_with_next(#state { contents = C } = State, _, [K, F]) ->
         false -> State;
         {_, V} ->
             Res = maps_runner:m_apply(F, [V]),
-            State#state { contents = replace_contents(K, Res, C) }
+            State#state { contents = replace(K, Res, C) }
     end.
 
 update_with_return(#state { contents = C}, [K, F]) ->
@@ -773,7 +766,7 @@ update_with_return(#state { contents = C}, [K, F]) ->
         false -> badkey(K);
         {_, V} ->
             Res = maps_runner:m_apply(F, [V]),
-            maps:from_list(replace_contents(K, Res, C))
+            maps:from_list(replace(K, Res, C))
     end.
 
 update_with_features(S, [K, _], _) ->
@@ -802,17 +795,17 @@ update_with_init_args(#state { contents = C } = State) ->
 
 update_with_init_next(#state { contents = C } = State, _, [K, F, Init]) ->
     case find(K, 1, C) of
-        false -> State#state { contents = add_contents(K, Init, C)};
+        false -> State#state { contents = store(K, Init, C)};
         {_, V} ->
-            State#state { contents = replace_contents(K, F(V), C) }
+            State#state { contents = replace(K, F(V), C) }
     end.
 
 update_with_init_return(#state { contents = C}, [K, F, Init]) ->
     case find(K, 1, C) of
         false ->
-            maps:from_list(add_contents(K, Init, C));
+            maps:from_list(store(K, Init, C));
         {_, V} ->
-            maps:from_list(replace_contents(K, F(V), C))
+            maps:from_list(replace(K, F(V), C))
     end.
 
 update_with_init_features(S, [K, _, _], _) ->
@@ -900,10 +893,10 @@ put_args(State) ->
     [map_key(State), map_value()].
 
 put_next(#state { contents = C } = State, _, [K, V]) ->
-    State#state { contents = add_contents(K, V, C) }.
+    State#state { contents = store(K, V, C) }.
 
 put_return(#state { contents = C}, [K, V]) ->
-    maps:from_list(add_contents(K, V, C)).
+    maps:from_list(store(K, V, C)).
 
 put_features(S, [K, _Value], _Res) ->
     case member(K, S) of
@@ -1044,17 +1037,8 @@ rc(distributed) ->
 %% that 0 and 0.0 compares as different elements. This lets us use lists as an
 %% isomorphic representation of maps in the model.
 
-add_contents(K, V, C, overwrite) ->
-    store(K, V, C, overwrite).
-
-add_contents(K, V, C) ->
-    store(K, V, C, keep).
-
 del_contents(K, C) ->
     delete(K, 1, C).
-
-replace_contents(K, V, C) ->
-    replace(K, V, C).
 
 member(K, #state { contents = C }) ->
     member(K, 1, C).
@@ -1069,11 +1053,11 @@ present(Ks, S) ->
 non_existing(Ks, S) ->
     lists:any(fun(K) -> not member(K, S) end, Ks).
 
-store(T, V, [], _) -> [{T, V}];
-store(T, N, [{K, V}|Next], Kind) ->
+store(T, V, []) -> [{T, V}];
+store(T, N, [{K, V}|Next]) ->
     case T =:= K of
-        true -> [{case Kind of keep -> K; overwrite -> T end, N}|Next];
-        false -> [{K, V}| store(T, N, Next, Kind)]
+        true -> [{K, N}|Next];
+        false -> [{K, V}| store(T, N, Next)]
     end.
 
 store_reject_dups(T, New, []) -> [{T, New}];
